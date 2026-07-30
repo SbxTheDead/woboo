@@ -32,10 +32,11 @@ const PLAN_SCHEMA = {
           title: { type: 'string', description: 'Short imperative label, under 60 chars.' },
           kind: {
             type: 'string',
-            enum: ['delegate', 'shell', 'compose', 'computer', 'inspect'],
+            enum: ['research', 'delegate', 'shell', 'compose', 'computer', 'inspect'],
             description:
+              'research = search the web, read sources, write a cited report and render it to PDF, all in one step; ' +
               'delegate = hand a spec to the installed coding tool; shell = run a command directly; ' +
-              'compose = read gathered sources and WRITE a document from them; ' +
+              'compose = read local files and WRITE a document from them; ' +
               'computer = drive the mouse and keyboard on screen like a person; inspect = look at the screen.',
           },
           instruction: {
@@ -93,18 +94,17 @@ reporting back. Plan for that shape:
   Commands that already exit properly on failure — npm test, git, tsc — need no
   wrapping.
 - Use "shell" steps for setup and checks, never for tasks a coding tool should do.
-- When the owner asks for research, a report, a summary or a write-up, the
-  deliverable is WRITING, not a copy of what you found. Downloading a page and
-  printing it to PDF is not research and is never an acceptable answer. Plan it
-  as: gather several sources -> ONE "compose" step that reads them and writes the
-  document -> render that document if a PDF was asked for.
-  A "compose" instruction says what to write and which files to read, like:
-    "Write a researched report on African and Asian elephants from the sources in
-     ./research. Cover biology, social structure, range and conservation status.
-     Sources: ./research"
-  Name the folder or files to read; compose reads .html, .txt, .md and .json and
-  strips the markup itself. Its "verify" should check the written file exists and
-  is a sensible size.
+- When the owner asks for research, a report, a briefing or a write-up on a
+  topic, use ONE "research" step and nothing else. It searches the web, judges
+  and reads the sources, notices what is still missing and looks again, writes a
+  cited document and renders the PDF — the whole job. Do not decompose it into
+  download-and-print steps: copying a page is not research and is never an
+  acceptable answer. The instruction is simply the question, stated fully:
+    "Research African and Asian elephants: biology, social structure, range,
+     population figures and conservation status. Deliver a PDF."
+  Leave its "verify" empty — the step checks its own work with an editor pass.
+- Use "compose" only to write from files that are ALREADY on disk. If the
+  material still has to be found, that is "research".
 - Use "computer" steps for work that only exists on screen: browsing the web,
   clicking through a GUI, reading a desktop app's interface. Woboo will look at the
   screen and drive the mouse and keyboard itself. State the goal, not the clicks —
@@ -206,14 +206,14 @@ function textOf(response) {
 }
 
 // One request shape, used by both plan() and repair().
-async function ask({ prompt, schema, maxTokens = 16_000 }) {
+async function askAnthropic({ prompt, schema, maxTokens = 16_000, system = SYSTEM }) {
   const settings = loadSettings();
   const anthropic = await getClient();
 
   const body = {
     model: settings.model,
     max_tokens: maxTokens,
-    system: SYSTEM,
+    system,
     thinking: { type: 'adaptive' },
     output_config: {
       effort: settings.effort,
@@ -295,11 +295,20 @@ ${memory}
 }
 Produce the plan.`;
 
-  const { data, usage, model } = await ask({ prompt, schema: PLAN_SCHEMA });
+  const { data, usage, model } = await askAnthropic({ prompt, schema: PLAN_SCHEMA });
   record('brain', `planned ${data.steps.length} step(s) with ${model}`, {
     level: 'ok',
     usage: usage && { in: usage.input_tokens, out: usage.output_tokens },
   });
+  return data;
+}
+
+// A structured answer to any question, whichever brain is in charge. The
+// research loop and the critic both need this — they ask things that are not
+// "make a plan" but still want validated JSON back.
+export async function ask({ system, prompt, schema, name = 'answer', maxTokens = 8000, think = true }) {
+  if (provider() === 'nim') return nim.structured({ system, prompt, schema, name, maxTokens, think });
+  const { data } = await askAnthropic({ prompt, schema, maxTokens, system });
   return data;
 }
 
@@ -338,7 +347,7 @@ ${failure.slice(0, 6000)}
 Write a corrected instruction for the coding tool. Quote the specific error, say what
 to change, and do not restate the whole original task.`;
 
-  const { data } = await ask({ prompt, schema: REPAIR_SCHEMA, maxTokens: 8000 });
+  const { data } = await askAnthropic({ prompt, schema: REPAIR_SCHEMA, maxTokens: 8000 });
   record('brain', `diagnosis: ${data.diagnosis}`, { level: 'warn' });
   return data;
 }

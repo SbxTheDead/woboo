@@ -18,6 +18,7 @@ import * as eyes from './eyes.mjs';
 import * as pilot from './pilot.mjs';
 import * as memory from './memory.mjs';
 import * as scribe from './scribe.mjs';
+import * as research from './research.mjs';
 import path from 'node:path';
 import { run } from './shell.mjs';
 
@@ -224,6 +225,17 @@ async function runStep(i, { cwd, member, task }) {
         setStep(i, { status: 'failed', output: work.out, ms: Date.now() - started });
         return false;
       }
+    } else if (step.kind === 'research') {
+      // One step, one loop: search, read, notice the gaps, look again, write,
+      // critique, revise, render. It owns its own iteration because the shape of
+      // research cannot be known before any of it has been read.
+      work = await research.investigate({
+        question: instruction,
+        workspace: cwd,
+        ask: brain.ask,
+        write: brain.write,
+        onProgress: (note) => publish({ type: 'crew:output', step: i, chunk: note }),
+      });
     } else if (step.kind === 'compose') {
       // The step that turns gathered material into something worth reading.
       // Sources come from whatever paths the instruction names; failing that,

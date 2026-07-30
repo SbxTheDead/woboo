@@ -111,6 +111,10 @@ async function ask({ system, prompt, schema, name, maxTokens = 8000, think = tru
     body.reasoning_budget = Math.min(16384, maxTokens * 2);
   } else {
     body.temperature = 0.2;
+    // Say "off" rather than staying silent. Nemotron reasons by default, and an
+    // omitted flag leaves it on — which on a long prompt means the whole output
+    // budget goes to deliberation and the JSON never arrives.
+    body.chat_template_kwargs = { enable_thinking: false };
   }
 
   const post = () =>
@@ -157,6 +161,12 @@ async function ask({ system, prompt, schema, name, maxTokens = 8000, think = tru
   // either way `content` is what we want.
   const data = extractJson(choice.message?.content);
   return { data, usage: payload.usage, model: payload.model };
+}
+
+// Any structured question, not just planning — the research loop asks about
+// gaps, the critic asks for a verdict.
+export function structured({ system, prompt, schema, name = 'answer', maxTokens = 8000, think = true }) {
+  return ask({ system, prompt, schema, name, maxTokens, think }).then((r) => r.data);
 }
 
 // Long-form prose rather than a schema — the scribe wants a document back, not
