@@ -210,7 +210,7 @@ export async function write({ system, prompt, maxTokens = 16_000 }) {
 // ── the two calls the foreman makes ───────────────────────────────────────────
 // Same shapes brain.mjs produces, so the foreman cannot tell which brain it got.
 
-export async function plan({ task, workspace, crew, memory = '', toolbox = '', schema, system }) {
+export async function plan({ task, workspace, crew, memory = '', toolbox = '', stance = '', schema, system }) {
   const prompt = `Owner's task:
 ${task}
 
@@ -223,6 +223,9 @@ What is actually available on this machine:
 ${toolbox}
 ` : ''}
 ${memory ? `\nWhat Woboo already knows about this workspace:\n\n${memory}\n` : ''}
+${stance ? `
+${stance}
+` : ''}
 Produce the plan.`;
 
   const { data, usage, model: used } = await ask({ system, prompt, schema, name: 'plan', maxTokens: 6000 });

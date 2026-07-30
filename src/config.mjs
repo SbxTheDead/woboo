@@ -36,6 +36,11 @@ const DEFAULTS = {
   port: 4477,
   // Which brain plans: 'auto' (Anthropic, else NIM), 'anthropic', or 'nim'.
   provider: 'auto',
+  // How Woboo prefers to work. 'gui' makes it use the real mouse and keyboard
+  // wherever a task could plausibly be done on screen — you watch it happen.
+  // 'commands' keeps everything invisible and scriptable. 'auto' lets the plan
+  // decide from the wording of the task.
+  prefer: 'auto',
   // The NIM model that looks at the screen when Woboo drives it. Chosen by
   // benchmark: it read a real desktop correctly and fastest of the candidates.
   nimVisionModel: 'meta/llama-3.2-90b-vision-instruct',

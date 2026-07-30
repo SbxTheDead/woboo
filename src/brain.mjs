@@ -105,11 +105,19 @@ reporting back. Plan for that shape:
   Leave its "verify" empty — the step checks its own work with an editor pass.
 - Use "compose" only to write from files that are ALREADY on disk. If the
   material still has to be found, that is "research".
-- Use "computer" steps for work that only exists on screen: browsing the web,
-  clicking through a GUI, reading a desktop app's interface. Woboo will look at the
-  screen and drive the mouse and keyboard itself. State the goal, not the clicks —
-  it decides where to click by looking. Prefer "shell" when a command would do the
-  same job, because a command can be verified and a click cannot.
+- Use "computer" steps for anything that happens on the owner's screen. Woboo
+  looks at the display and drives the real mouse and keyboard. State the goal,
+  not the clicks — it works out where to click by looking.
+  Choose "computer" whenever the task names an application, a window, or an
+  on-screen action: open/launch/click/type/browse/search/watch/play/log in, or
+  any app by name — Chrome, Edge, VS Code, Word, Spotify, Explorer, Settings.
+  "Open Chrome and search for X" is a computer step. Do NOT quietly turn it into
+  a shell command that fetches the same information invisibly: the owner asked to
+  see their machine used, and a background HTTP request is not that.
+  Choose "shell" for work with no visible surface — files, git, builds, tests,
+  installs — where a command is exact and verifiable.
+  When a task could go either way, ask which the owner actually wants to happen:
+  if they said "open", they want the window open.
 - Write every shell command for the platform's real shell. On win32 that is
   PowerShell, never cmd.exe: use Test-Path, New-Item, $LASTEXITCODE. cmd-isms
   like "if exist X exit 0 else exit 1", %VAR% or 2>NUL are parse errors there and
@@ -260,11 +268,22 @@ async function askAnthropic({ prompt, schema, maxTokens = 16_000, system = SYSTE
 }
 
 export async function plan({ task, workspace, crew, memory = '' }) {
+  const prefer = loadSettings().prefer || 'auto';
+  const stance =
+    prefer === 'gui'
+      ? 'The owner has set Woboo to work on screen. Use computer steps for anything ' +
+        'that has a visible surface, even when a command could do it invisibly. They ' +
+        'want to watch their machine being used. Reserve shell for work with no ' +
+        'window at all: files, git, builds, tests.'
+      : prefer === 'commands'
+        ? 'The owner has set Woboo to prefer commands. Avoid computer steps unless ' +
+          'the task genuinely cannot be done any other way.'
+        : '';
   // What is genuinely installed, so the plan is built on tools that exist.
   const toolbox = await describeTools().catch(() => '');
 
   if (provider() === 'nim') {
-    return nim.plan({ task, workspace, crew, memory, toolbox, schema: PLAN_SCHEMA, system: SYSTEM });
+    return nim.plan({ task, workspace, crew, memory, toolbox, stance, schema: PLAN_SCHEMA, system: SYSTEM });
   }
   const prompt = `Owner's task:
 ${task}
