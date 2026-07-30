@@ -26,3 +26,6 @@ elephant_research/
 research/
 invest_research/
 *_research/
+# Documents Woboo writes land in the workspace root; source HTML lives in desktop/.
+/*.html
+/*.pdf

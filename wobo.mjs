@@ -590,7 +590,7 @@ async function main() {
       return cmdNim(args);
     case 'secret': {
       const [name, ...value] = args;
-      const known = { anthropic: 'anthropicApiKey', telegram: 'telegramToken', nvidia: 'nvidiaApiKey' };
+      const known = { anthropic: 'anthropicApiKey', telegram: 'telegramToken', nvidia: 'nvidiaApiKey', tavily: 'tavilyApiKey' };
       if (!known[name]) {
         say(red('  usage: wobo secret <anthropic|telegram> <value>'));
         return 2;
