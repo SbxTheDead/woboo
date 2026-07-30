@@ -19,6 +19,8 @@ import * as pilot from './pilot.mjs';
 import * as memory from './memory.mjs';
 import * as scribe from './scribe.mjs';
 import * as research from './research.mjs';
+import * as webpilot from './webpilot.mjs';
+import { route as reachRoute } from './capabilities.mjs';
 import path from 'node:path';
 import { run } from './shell.mjs';
 
@@ -253,6 +255,15 @@ async function runStep(i, { cwd, member, task }) {
         workspace: cwd,
         ask: brain.ask,
         write: brain.write,
+        onProgress: (note) => publish({ type: 'crew:output', step: i, chunk: note }),
+      });
+    } else if (step.kind === 'web') {
+      // Browser work through the DOM: real elements, real clicks, no guessing.
+      const reach = reachRoute(instruction);
+      work = await webpilot.browse({
+        goal: instruction,
+        url: reach.url,
+        ask: brain.ask,
         onProgress: (note) => publish({ type: 'crew:output', step: i, chunk: note }),
       });
     } else if (step.kind === 'compose') {

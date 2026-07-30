@@ -100,11 +100,15 @@ export async function investigate({
 
   // ── what to look for ────────────────────────────────────────────────────
   setFace('thinking', 'working out what to look for');
+  // Naming the facets of a question is recall, not deliberation — thinking mode
+  // roughly doubles the latency here and changes the queries not at all. The gap
+  // audit below keeps it, because deciding what is missing is a judgement.
   const opening = await ask({
     system: PLANNER,
     prompt: `The question:\n${question}\n\nDecide the title, a one-sentence standfirst, and the opening search queries.`,
     schema: QUERY_SCHEMA,
     name: 'queries',
+    think: false,
   });
   say(`researching "${opening.title}" — ${opening.queries.length} opening queries`);
 
@@ -117,9 +121,13 @@ export async function investigate({
     setFace('working', `round ${round}: searching`);
 
     // ── search and judge ──────────────────────────────────────────────────
+    // Four searches at once rather than four in a row. They do not depend on
+    // each other, so waiting for each in turn was pure idle time.
+    const batches = await Promise.all(
+      queries.slice(0, 4).map((query) => sources.search(query, { limit: perQuery }).catch(() => [])),
+    );
     const candidates = [];
-    for (const query of queries.slice(0, 4)) {
-      const hits = await sources.search(query, { limit: perQuery });
+    for (const hits of batches) {
       for (const hit of hits) {
         if (seenHosts.has(hit.host)) continue;
         candidates.push(hit);
@@ -135,26 +143,30 @@ export async function investigate({
     // least fetchable — a government PDF or a site that blocks robots — so a
     // run that only tried the top of the list could come back empty while a
     // dozen perfectly good pages sat below it.
+    // Fetch a batch at a time rather than one after another. A slow or dead
+    // source used to hold up every source behind it; now the batch is only as
+    // slow as its slowest member, and the unreadable ones cost nothing.
+    const queue = candidates.filter((c) => !seenHosts.has(c.host)).slice(0, 12);
     let readThisRound = 0;
-    let tried = 0;
-    for (const candidate of candidates) {
+
+    for (let at = 0; at < queue.length && readThisRound < 4; at += 4) {
       assertLive('research');
-      if (readThisRound >= 4 || tried >= 14) break;
-      // Two results from the same site are one source, not two.
-      if (seenHosts.has(candidate.host)) continue;
-      tried += 1;
+      const batch = queue.slice(at, at + 4);
+      const fetched = await Promise.all(batch.map((c) => sources.fetchSource(c).catch(() => null)));
 
-      const fetched = await sources.fetchSource(candidate);
-      if (!fetched) continue;
-      seenHosts.add(fetched.host);
+      for (const source of fetched) {
+        if (!source || readThisRound >= 4) continue;
+        if (seenHosts.has(source.host)) continue;
+        seenHosts.add(source.host);
 
-      const picked = sources.selectPassages(fetched.text, `${question} ${opening.standfirst}`);
-      if (picked.chars < 400) continue;
-      gathered.push({ ...fetched, text: picked.text, kept: picked.kept, of: picked.of });
-      readThisRound += 1;
-      say(`  read ${fetched.host} — kept ${picked.kept}/${picked.of} passages (${Math.round(picked.chars / 1000)}k)`);
+        const picked = sources.selectPassages(source.text, `${question} ${opening.standfirst}`);
+        if (picked.chars < 400) continue;
+        gathered.push({ ...source, text: picked.text, kept: picked.kept, of: picked.of });
+        readThisRound += 1;
+        say(`  read ${source.host} — kept ${picked.kept}/${picked.of} passages (${Math.round(picked.chars / 1000)}k)`);
+      }
     }
-    if (!readThisRound) say(`round ${round}: ${tried} source(s) tried, none readable`, 'warn');
+    if (!readThisRound) say(`round ${round}: ${queue.length} source(s) tried, none readable`, 'warn');
 
     if (!gathered.length) {
       say('nothing readable found', 'warn');

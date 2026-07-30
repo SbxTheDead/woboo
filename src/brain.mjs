@@ -14,6 +14,7 @@ import os from 'node:os';
 import { loadSettings } from './config.mjs';
 import * as nim from './nim.mjs';
 import { describe as describeTools } from './toolbox.mjs';
+import { describe as describeReach } from './capabilities.mjs';
 import { record } from './journal.mjs';
 
 const PLAN_SCHEMA = {
@@ -32,9 +33,10 @@ const PLAN_SCHEMA = {
           title: { type: 'string', description: 'Short imperative label, under 60 chars.' },
           kind: {
             type: 'string',
-            enum: ['research', 'delegate', 'shell', 'compose', 'computer', 'inspect'],
+            enum: ['research', 'web', 'delegate', 'shell', 'compose', 'computer', 'inspect'],
             description:
               'research = search the web, read sources, write a cited report and render it to PDF, all in one step; ' +
+              'web = drive a real browser through the DOM: click real elements, fill forms, read pages; ' +
               'delegate = hand a spec to the installed coding tool; shell = run a command directly; ' +
               'compose = read local files and WRITE a document from them; ' +
               'computer = drive the mouse and keyboard on screen like a person; inspect = look at the screen.',
@@ -280,7 +282,9 @@ export async function plan({ task, workspace, crew, memory = '' }) {
           'the task genuinely cannot be done any other way.'
         : '';
   // What is genuinely installed, so the plan is built on tools that exist.
-  const toolbox = await describeTools().catch(() => '');
+  const toolbox = [await describeTools().catch(() => ''), describeReach()]
+    .filter(Boolean)
+    .join('\n\n');
 
   if (provider() === 'nim') {
     return nim.plan({ task, workspace, crew, memory, toolbox, stance, schema: PLAN_SCHEMA, system: SYSTEM });

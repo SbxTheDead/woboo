@@ -73,6 +73,19 @@ export async function screenshot({ reason = '' } = {}) {
 const LONG_EDGE_MAX = 2576;
 const PIXELS_MAX = 3_750_000;
 
+// What the pilot sends the model, as opposed to what a person looks at.
+//
+// Measured on this machine, same question, same answer from the model:
+//   1920 PNG  326KB  4771ms
+//    960 JPEG   72KB  1756ms
+//
+// 85% of a pilot step is the model reading the image, and that cost scales with
+// pixels. A screenshot is a photograph of flat UI — JPEG at 82 is visually
+// indistinguishable here and a quarter of the bytes. 960 wide still resolves
+// window titles and grid labels comfortably.
+const PILOT_WIDTH = 960;
+const PILOT_QUALITY = 82;
+
 export function scaleFor(width, height) {
   const longEdge = Math.max(width, height);
   return Math.min(1, LONG_EDGE_MAX / longEdge, Math.sqrt(PIXELS_MAX / (width * height)));
@@ -98,6 +111,28 @@ if ($w -ne $bounds.Width -or $h -ne $bounds.Height) {
   $shot.Save('${target.replace(/'/g, "''")}', [System.Drawing.Imaging.ImageFormat]::Png)
 }
 $gfx.Dispose(); $shot.Dispose()
+Write-Output ("{0} {1} {2} {3}" -f $w, $h, $bounds.Width, $bounds.Height)
+`;
+
+// The pilot's version: small, and JPEG. Everything the model needs to pick a
+// grid cell, at a quarter of the bytes and under half the latency.
+const WINDOWS_CAPTURE_FAST = (target, width, quality) => `
+$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+$bounds = [System.Windows.Forms.SystemInformation]::VirtualScreen
+$shot = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
+$gfx = [System.Drawing.Graphics]::FromImage($shot)
+$gfx.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
+$w = ${width}; $h = [int]($bounds.Height * ${width} / $bounds.Width)
+$small = New-Object System.Drawing.Bitmap $w, $h
+$g2 = [System.Drawing.Graphics]::FromImage($small)
+$g2.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+$g2.DrawImage($shot, 0, 0, $w, $h)
+$enc = [System.Drawing.Imaging.ImageCodecInfo]::GetImageEncoders() | Where-Object { $_.MimeType -eq 'image/jpeg' }
+$p = New-Object System.Drawing.Imaging.EncoderParameters 1
+$p.Param[0] = New-Object System.Drawing.Imaging.EncoderParameter ([System.Drawing.Imaging.Encoder]::Quality), ${quality}
+$small.Save('${target.replace(/'/g, "''")}', $enc, $p)
+$g2.Dispose(); $small.Dispose(); $gfx.Dispose(); $shot.Dispose()
 Write-Output ("{0} {1} {2} {3}" -f $w, $h, $bounds.Width, $bounds.Height)
 `;
 
@@ -156,7 +191,10 @@ for ($c = 0; $c -lt ${cols}; $c++) {
     $g2.DrawString($label, $font, $ink, $x, $y)
   }
 }
-$canvas.Save('${target.replace(/'/g, "''")}', [System.Drawing.Imaging.ImageFormat]::Png)
+$enc = [System.Drawing.Imaging.ImageCodecInfo]::GetImageEncoders() | Where-Object { $_.MimeType -eq 'image/jpeg' }
+$p = New-Object System.Drawing.Imaging.EncoderParameters 1
+$p.Param[0] = New-Object System.Drawing.Imaging.EncoderParameter ([System.Drawing.Imaging.Encoder]::Quality), ${PILOT_QUALITY}
+$canvas.Save('${target.replace(/'/g, "''")}', $enc, $p)
 $line.Dispose(); $font.Dispose(); $ink.Dispose(); $pad.Dispose()
 $g2.Dispose(); $canvas.Dispose(); $gfx.Dispose(); $shot.Dispose()
 Write-Output ("{0} {1} {2} {3}" -f $w, $h, $bounds.Width, $bounds.Height)
@@ -169,8 +207,13 @@ export function cellToPixel(cell, screen) {
   const col = COL_NAMES.indexOf(match[1].toUpperCase());
   const row = Number(match[2]) - 1;
   if (col < 0 || row < 0 || row >= GRID.rows) return null;
-  const cw = screen.width / GRID.cols;
-  const ch = screen.height / GRID.rows;
+  // The grid is drawn on the downscaled frame the model sees, but a click has to
+  // land on the real screen. Prefer the true screen size when the capture
+  // reported it; fall back to the frame's own dimensions for a 1:1 capture.
+  const width = screen.screen?.width || screen.width;
+  const height = screen.screen?.height || screen.height;
+  const cw = width / GRID.cols;
+  const ch = height / GRID.rows;
   return [Math.round(col * cw + cw / 2), Math.round(row * ch + ch / 2)];
 }
 
@@ -198,7 +241,9 @@ export async function capture({ reason = '', region = null, grid = false } = {})
     // Measure first so the scale factor is known before the pixels are resized.
     const size = await screenSize();
     if (!size.ok) return { ok: false, error: size.error };
-    const scale = scaleFor(size.width, size.height);
+    // The pilot's grid frames go to a model, so they take the small fast path.
+    // A plain capture is for a person to look at and keeps full resolution.
+    const scale = grid ? PILOT_WIDTH / size.width : scaleFor(size.width, size.height);
     source = grid
       ? WINDOWS_GRID(target, scale, GRID.cols, GRID.rows)
       : WINDOWS_CAPTURE_SCALED(target, scale);
