@@ -36,6 +36,9 @@ const DEFAULTS = {
   port: 4477,
   // Which brain plans: 'auto' (Anthropic, else NIM), 'anthropic', or 'nim'.
   provider: 'auto',
+  // The NIM model that looks at the screen when Woboo drives it. Chosen by
+  // benchmark: it read a real desktop correctly and fastest of the candidates.
+  nimVisionModel: 'meta/llama-3.2-90b-vision-instruct',
   // The NVIDIA NIM model used when provider resolves to 'nim'.
   nimModel: 'nvidia/nemotron-3-super-120b-a12b',
   // The brain. Opus 5 is the default; effort is the intelligence/cost dial.
