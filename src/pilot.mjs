@@ -247,9 +247,45 @@ async function nimAct(messages, model, key) {
   throw new Error(`could not read an action from: ${text.slice(0, 200)}`);
 }
 
-async function driveWithNim({ goal, maxSteps, onProgress }) {
+async function driveWithNim({ goal, maxSteps, onProgress, dryRun = false }) {
   const key = nim.apiKey();
   const model = loadSettings().nimVisionModel || 'meta/llama-3.2-90b-vision-instruct';
+
+  // A dry run proves the whole chain — capture, grid, the model's reading of the
+  // screen, the parsed action, the pixel it maps to — without the hands ever
+  // moving. It is how you check the wiring before handing over the mouse.
+  if (dryRun) {
+    const shot = await eyes.capture({ reason: 'dry run', grid: true });
+    if (!shot.ok) throw new Error(`cannot see the screen: ${shot.error}`);
+    frame = shot;
+
+    const messages = [
+      { role: 'system', content: NIM_SYSTEM },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: `Goal: ${goal}\n\nHere is the screen now (${shot.width}x${shot.height}). Decide the single next action.` },
+          { type: 'image_url', image_url: { url: `data:image/png;base64,${shot.base64}` } },
+        ],
+      },
+    ];
+    const { step: act, raw } = await nimAct(messages, model, key);
+    const pixel = act.cell ? eyes.cellToPixel(act.cell, shot) : null;
+    return {
+      ok: true,
+      dryRun: true,
+      out:
+        `would ${act.action}` +
+        (act.cell ? ` at cell ${act.cell} → pixel ${pixel ? pixel.join(',') : 'INVALID'}` : '') +
+        (act.text ? ` "${act.text}"` : '') +
+        (act.combo ? ` [${act.combo}]` : '') +
+        (act.thought ? `\n  reasoning: ${act.thought}` : ''),
+      action: act,
+      pixel,
+      raw,
+      screen: `${shot.width}x${shot.height}`,
+    };
+  }
 
   await hands.openSession(goal);
   setFace('working', 'driving the screen');
@@ -348,11 +384,11 @@ function toReal([x, y], shot) {
   return [Math.round(x / scale), Math.round(y / scale)];
 }
 
-export async function drive({ goal, maxSteps = 24, onProgress } = {}) {
+export async function drive({ goal, maxSteps = 24, onProgress, dryRun = false } = {}) {
   // Whichever brain is in charge drives, so "everything on NIM" really is
   // everything — with the grid standing in for grounding NIM does not have.
   if (brainProvider() === 'nim' && nim.hasCredentials()) {
-    return driveWithNim({ goal, maxSteps, onProgress });
+    return driveWithNim({ goal, maxSteps, onProgress, dryRun });
   }
 
   if (!hasCredentials()) {

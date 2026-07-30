@@ -180,6 +180,7 @@ export async function start({ token, onPairCode } = {}) {
             '/stop — engage STOP\n' +
             '/resume — release STOP\n' +
             '/look — screenshot\n' +
+            '/drive &lt;goal&gt; — take the mouse and keyboard\n' +
             '/log — recent journal\n' +
             '/memory — what it remembers here\n' +
             '/note &lt;text&gt; — remember this, do not repeat it',
@@ -221,6 +222,19 @@ export async function start({ token, onPairCode } = {}) {
         const cwd = loadSettings().workspace || process.cwd();
         const digest = memory.recall(cwd);
         return tell(digest ? `<b>Remembers about ${esc(cwd)}</b>\n${esc(digest)}` : 'Nothing remembered here yet.');
+      }
+
+      case '/drive': {
+        if (!argument) return tell('give it a goal: <code>/drive open Edge and search for X</code>');
+        if (foreman.isBusy()) return tell('busy — /status, or /stop first.');
+        if (guard.isStopped()) return tell('STOP is engaged — /resume first.');
+        tell(`🖱 <i>taking the mouse: ${esc(argument)}</i>`);
+        const pilot = await import('./pilot.mjs');
+        pilot
+          .drive({ goal: argument, onProgress: (note) => tell(`  <i>${esc(note)}</i>`) })
+          .then((r) => tell(`${r.ok ? '✅' : '❌'} ${esc(r.out)}`))
+          .catch((err) => tell(`💥 ${esc(err.message)}`));
+        return undefined;
       }
 
       case '/note': {

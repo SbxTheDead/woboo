@@ -175,6 +175,51 @@ async function cmdUp(flags) {
   return new Promise(() => {}); // run until interrupted
 }
 
+// Hand Woboo the mouse and keyboard. This is the one command that takes over the
+// machine, so it says so plainly first and `--dry` proves the wiring without
+// moving anything.
+async function cmdDrive(goal, flags) {
+  if (!goal) {
+    say(red('  give it a goal: woboo drive "open Edge and search for elephant population 2024"'));
+    say(dim('  add --dry to see what it would do without touching the mouse.'));
+    return 2;
+  }
+
+  const pilot = await import('./src/pilot.mjs');
+  const offMirror = mirrorJournal();
+  const offApprovals = terminalApprovals();
+
+  try {
+    if (flags.dry) {
+      say(dim('  dry run — looking at the screen, deciding one action, touching nothing.'));
+      const result = await pilot.drive({ goal, dryRun: true });
+      say('');
+      say(`  screen  ${dim(result.screen || '')}`);
+      say(`  ${bold(result.out)}`);
+      return result.ok ? 0 : 1;
+    }
+
+    say('');
+    say(yellow('  Woboo is about to take your mouse and keyboard.'));
+    say(dim('  Press STOP in the widget, or Ctrl+C here, to stop it at any point.'));
+    say('');
+
+    const result = await pilot.drive({
+      goal,
+      onProgress: (note) => say(dim(`  ${note}`)),
+    });
+    say('');
+    say(result.ok ? green(`  ✓ ${result.out}`) : red(`  ✗ ${result.out}`));
+    return result.ok ? 0 : 1;
+  } catch (err) {
+    say(red(`  ${err.message}`));
+    return 1;
+  } finally {
+    offMirror();
+    offApprovals();
+  }
+}
+
 // Reachable from your phone. Long polling, so no public URL and no inbound port.
 async function cmdTelegram() {
   const secrets = loadSecrets();
@@ -484,6 +529,7 @@ function help() {
   say(`  ${bold('usage')}  wobo <command> [options]`);
   say('');
   say(`  ${bold('widget')}             put Woboo on your desktop ${dim('(the companion)')}`);
+  say(`  ${bold('drive')} "<goal>"     hand it the mouse and keyboard ${dim('(--dry to preview)')}`);
   say(`  ${bold('telegram')}           reach Woboo from your phone`);
   say(`  ${bold('up')}                 start the browser panel ${dim('(--port N, --open)')}`);
   say(`  ${bold('memory')} [dir]       what Woboo remembers ${dim('(--all, --forget)')}`);
@@ -514,6 +560,7 @@ function parse(argv) {
     if (token === '--open') flags.open = true;
     else if (token === '--port') flags.port = Number(argv[++i]);
     else if (token === '--workspace') flags.workspace = argv[++i];
+    else if (token === '--dry') flags.dry = true;
     else if (token === '--help' || token === '-h') flags.help = true;
     else rest.push(token);
   }
@@ -533,6 +580,8 @@ async function main() {
     case 'widget':
     case 'desktop':
       return cmdWidget();
+    case 'drive':
+      return cmdDrive(args.join(' ').trim(), flags);
     case 'telegram':
       return cmdTelegram();
     case 'memory':

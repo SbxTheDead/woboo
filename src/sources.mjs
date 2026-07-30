@@ -7,6 +7,7 @@
 // person skims for the relevant part. This scores passages against the question
 // and reads those, which is the same idea with worse taste.
 
+import { loadSecrets } from './config.mjs';
 import { record } from './journal.mjs';
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Woboo/1.0';
@@ -55,7 +56,71 @@ export function authority(url) {
   return 1;
 }
 
+// Tavily is a search API built for agents: it ranks by relevance to the query
+// and hands back the extracted article text. That second part matters as much as
+// the first — scraping got 403s from worldwildlife.org and timed out on IUCN
+// PDFs, and a source that cannot be fetched is a source that cannot be cited.
+async function searchTavily(query, limit) {
+  const key = loadSecrets().tavilyApiKey || process.env.TAVILY_API_KEY;
+  if (!key) return null;
+
+  try {
+    const response = await fetch('https://api.tavily.com/search', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        api_key: key,
+        query,
+        search_depth: 'advanced',
+        max_results: Math.max(limit, 8),
+        include_raw_content: true,
+      }),
+      signal: AbortSignal.timeout(25_000),
+    });
+    if (!response.ok) {
+      record('research', `Tavily ${response.status}; falling back to open search`, { level: 'warn' });
+      return null;
+    }
+
+    const body = await response.json();
+    const seen = new Set();
+    const hits = [];
+    for (const result of body.results || []) {
+      let host;
+      try {
+        host = new URL(result.url).hostname.replace(/^www\./, '');
+      } catch {
+        continue;
+      }
+      if (seen.has(host) || SKIP.test(result.url)) continue;
+      const rank = authority(result.url);
+      if (rank === 0) continue;
+      seen.add(host);
+      hits.push({
+        url: result.url,
+        host,
+        authority: rank,
+        query,
+        title: result.title || '',
+        // Already extracted — no second request, and no 403 to lose it to.
+        content: result.raw_content || result.content || '',
+        relevance: result.score ?? 0,
+      });
+      if (hits.length >= limit) break;
+    }
+    return hits;
+  } catch (err) {
+    record('research', `Tavily failed (${err.message}); falling back to open search`, { level: 'warn' });
+    return null;
+  }
+}
+
 export async function search(query, { limit = 8 } = {}) {
+  // Prefer the real search API; keep the keyless path so Woboo still works
+  // without one.
+  const viaApi = await searchTavily(query, limit);
+  if (viaApi && viaApi.length) return viaApi;
+
   const url = `https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(query)}`;
   try {
     const response = await fetch(url, { headers: { 'user-agent': UA } });
@@ -106,6 +171,15 @@ export function htmlToText(html) {
 // Short by design: a slow source is not worth a long wait when there are a
 // dozen others in the queue.
 export async function fetchSource(hit, { timeout = 9000 } = {}) {
+  // The search API already extracted this one. Skipping the round trip is the
+  // difference between reading a source and losing it to a 403.
+  if (hit.content && hit.content.length > 600) {
+    const text = /<[a-z][\s>]/i.test(hit.content) ? htmlToText(hit.content) : hit.content;
+    if (text.length > 600) {
+      return { ...hit, title: hit.title || text.split('\n')[0].slice(0, 120), text, length: text.length };
+    }
+  }
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
   try {
