@@ -56,13 +56,22 @@ function candidatePaths(bin) {
   return out;
 }
 
+// Finding where a binary lives is inspection, not action — the same class of
+// thing as reading the journal, and nothing here runs the tool. It has to keep
+// working while STOP is engaged: the widget calls this to render itself, and a
+// halt that blocks the status call blocks the very button that releases it.
 async function locate(bin) {
-  // Ask the OS first — it knows about PATH, aliases, and shims.
-  const probe = isWindows() ? ['where.exe', [bin]] : ['/usr/bin/which', [bin]];
-  const found = await exec(probe[0], probe[1], { timeout: 8000, action: 'locate crew' });
-  if (found.ok && found.out) {
-    const first = found.out.split(/\r?\n/)[0].trim();
-    if (first) return first;
+  try {
+    // Ask the OS first — it knows about PATH, aliases, and shims.
+    const probe = isWindows() ? ['where.exe', [bin]] : ['/usr/bin/which', [bin]];
+    const found = await exec(probe[0], probe[1], { timeout: 8000, action: 'locate crew' });
+    if (found.ok && found.out) {
+      const first = found.out.split(/\r?\n/)[0].trim();
+      if (first) return first;
+    }
+  } catch {
+    // Halted, or no shell to ask. Fall through to looking on disk, which needs
+    // no child process and no permission.
   }
   for (const candidate of candidatePaths(bin)) {
     if (fs.existsSync(candidate)) return candidate;

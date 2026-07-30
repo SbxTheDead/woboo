@@ -360,32 +360,47 @@ if (!app.requestSingleInstanceLock()) {
     const settled = (ms) => new Promise((r) => setTimeout(r, ms));
     await settled(500); // let the splash paint before the first line lands
 
+    // Every probe below is wrapped. A boot check that fails is information to
+    // put on the splash, never a reason to leave the owner staring at it — and
+    // the app must start even when Woboo is forbidden from acting, or STOP
+    // becomes a lockout: it blocks the boot, and releasing it needs the app.
+    const probe = async (label, fn, describe) => {
+      try {
+        const value = await fn();
+        const [detail, level] = describe(value);
+        bootStep(label, detail, level || 'ok');
+        return value;
+      } catch (err) {
+        bootStep(label, err.message.slice(0, 44), 'warn');
+        return null;
+      }
+    };
+
     loadSecrets();
     bootStep('waking up', path.basename(PATHS.home));
     await settled(160);
 
-    const members = await crew.discover();
-    const ready = members.filter((m) => m.available);
-    bootStep(
-      ready.length ? 'crew on hand' : 'no coding tool found',
-      ready.map((m) => m.label).join(', ') || 'delegate steps disabled',
-      ready.length ? 'ok' : 'warn',
+    // Say it first and plainly: nothing else on the list matters while it holds.
+    if (guard.isStopped()) {
+      bootStep('STOP is engaged', guard.stopReason().slice(0, 40) || 'release it to work', 'warn');
+      await settled(160);
+    }
+
+    await probe('crew', () => crew.discover(), (members) => {
+      const ready = (members || []).filter((m) => m.available);
+      return ready.length
+        ? [ready.map((m) => m.label).join(', '), 'ok']
+        : ['no coding tool — delegate steps disabled', 'warn'];
+    });
+    await settled(160);
+
+    await probe('brain', async () => brain.status(), (state) =>
+      state?.credentials ? [state.model, 'ok'] : ['offline — deterministic plans', 'warn'],
     );
     await settled(160);
 
-    const brainState = brain.status();
-    bootStep(
-      brainState.credentials ? 'brain awake' : 'brain offline',
-      brainState.credentials ? brainState.model : 'deterministic plans',
-      brainState.credentials ? 'ok' : 'warn',
-    );
-    await settled(160);
-
-    const screen_ = await eyes.screenSize();
-    bootStep(
-      screen_.ok ? 'eyes open' : 'eyes unavailable',
-      screen_.ok ? `${screen_.width}x${screen_.height}` : '',
-      screen_.ok ? 'ok' : 'warn',
+    await probe('eyes', () => eyes.screenSize(), (screen_) =>
+      screen_?.ok ? [`${screen_.width}x${screen_.height}`, 'ok'] : ['unavailable', 'warn'],
     );
     await settled(160);
 
@@ -486,6 +501,19 @@ if (!app.requestSingleInstanceLock()) {
     if (typeof watchCursor.unref === 'function') watchCursor.unref();
 
     foreman.startIdleWatch();
+  }).catch((err) => {
+    // The last line of defence. Whatever went wrong during boot, the owner ends
+    // up with a working app rather than a splash screen that never leaves —
+    // they can read the journal, press STOP, or fix the thing that broke. An
+    // app that will not open is worse than one that opens with a warning.
+    record('app', `boot failed: ${err.message}`, { level: 'error' });
+    try {
+      if (splash && !splash.isDestroyed()) splash.close();
+      if (!win) createWindow();
+      buildTray();
+    } catch {
+      // If even this fails there is nothing sensible left to try.
+    }
   });
 
   // The widget is the app: closing the window should not leave a ghost process,
