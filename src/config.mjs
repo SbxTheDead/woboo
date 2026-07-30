@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 
 export const HOME =
   process.env.WOBOO_HOME || process.env.WOBO_HOME || path.join(os.homedir(), '.woboo');
@@ -91,6 +92,40 @@ export function saveSettings(patch) {
   return next;
 }
 
+// Lock a file to its owner.
+//
+// POSIX mode bits are theatre on Windows — every file reports 666, chmod only
+// toggles the read-only flag, and writeFileSync's mode option applies solely at
+// creation. So a file holding API keys looked world-readable no matter what was
+// asked for. NTFS is what actually decides, so say it in NTFS: break inheritance
+// and grant the current user alone.
+//
+// In practice %USERPROFILE% is already restricted to its owner, SYSTEM and
+// administrators, so this narrows an already-narrow door. It is cheap, and a
+// file with a bot token in it deserves the explicit grant.
+function harden(file) {
+  if (process.platform !== 'win32') {
+    try {
+      fs.chmodSync(file, 0o600);
+    } catch {
+      // Filesystem refused it; the file is still inside the owner's home.
+    }
+    return;
+  }
+  try {
+    const user = process.env.USERNAME;
+    if (!user) return;
+    // /inheritance:r drops inherited ACEs, then grant only this account.
+    execFileSync('icacls.exe', [file, '/inheritance:r', '/grant:r', `${user}:F`], {
+      stdio: 'ignore',
+      timeout: 8000,
+    });
+  } catch {
+    // icacls missing, or the path is on a filesystem without ACLs. Nothing is
+    // made worse by failing here.
+  }
+}
+
 // ── secrets ───────────────────────────────────────────────────────────────────
 // Credentials live in one 0600 file rather than scattered across environment
 // variables, so "set this up once" is a real thing rather than a shell ritual.
@@ -122,7 +157,15 @@ export function saveSecret(name, value) {
   }
   if (value === null) delete secrets[name];
   else secrets[name] = value;
+
+  // The mode option on writeFileSync only applies when the file is created, so
+  // a file that already existed keeps whatever permissions it had — which is how
+  // this ended up world-readable despite asking for 0600 every time. Set it
+  // explicitly afterwards. On Windows the POSIX bits are largely cosmetic (ACLs
+  // on the profile directory do the real work), but it costs nothing and it is
+  // correct everywhere else.
   fs.writeFileSync(PATHS.secrets, `${JSON.stringify(secrets, null, 2)}\n`, { mode: 0o600 });
+  harden(PATHS.secrets);
   return Object.keys(secrets);
 }
 
