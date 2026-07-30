@@ -49,6 +49,38 @@ export function browserPath() {
   return chromePath() || edgePath();
 }
 
+export function profileRoot() {
+  const local = process.env.LOCALAPPDATA || '';
+  return chromePath()
+    ? path.join(local, 'Google', 'Chrome', 'User Data')
+    : path.join(local, 'Microsoft', 'Edge', 'User Data');
+}
+
+// Every profile the owner actually has, with the name and account they would
+// recognise. "Default" is a directory name, not a choice — someone with three
+// profiles has three different inboxes, and picking one for them is how Woboo
+// ends up composing mail from the wrong person.
+export function listProfiles() {
+  const root = profileRoot();
+  try {
+    const state = JSON.parse(fs.readFileSync(path.join(root, 'Local State'), 'utf8'));
+    const cache = state.profile?.info_cache || {};
+    return Object.entries(cache)
+      .map(([dir, info]) => ({
+        dir,
+        name: info.name || dir,
+        email: info.user_name || '',
+        lastUsed: state.profile?.last_used === dir,
+        // A profile listed in Local State but absent on disk is a leftover.
+        present: fs.existsSync(path.join(root, dir)),
+      }))
+      .filter((p) => p.present)
+      .sort((a, b) => Number(b.lastUsed) - Number(a.lastUsed));
+  } catch {
+    return [];
+  }
+}
+
 let cache = null;
 
 export function edgePath() {

@@ -16,11 +16,12 @@
 // had a WebSocket client built in since v22, so it costs no dependency at all.
 
 import { spawn } from 'node:child_process';
-import { loadSettings } from './config.mjs';
+import { loadSettings, saveSettings } from './config.mjs';
 import { record } from './journal.mjs';
 import { assertLive } from './guard.mjs';
 import { exec } from './ps.mjs';
-import { browserPath } from './toolbox.mjs';
+import * as consult from './consult.mjs';
+import { browserPath, profileRoot, listProfiles } from './toolbox.mjs';
 
 const PORT = 9333;
 const HOST = '127.0.0.1';
@@ -66,12 +67,14 @@ async function waitForBrowser(seconds = 20) {
 // process — with no debugging port. That failure is silent, which is worse than
 // loud, so it is detected and explained rather than guessed at.
 function profileArgs() {
-  const useReal = loadSettings().browserProfile === 'mine';
-  if (!useReal) {
+  const settings = loadSettings();
+  if (settings.browserProfile !== 'mine') {
     return [`--user-data-dir=${process.env.TEMP || '.'}\\woboo-browser`];
   }
-  const root = `${process.env.LOCALAPPDATA || ''}\\Google\\Chrome\\User Data`;
-  return [`--user-data-dir=${root}`, '--profile-directory=Default'];
+  // Which of the owner's profiles, named explicitly. Never a default: a person
+  // with three profiles has three inboxes, and guessing means sending mail as
+  // the wrong one.
+  return [`--user-data-dir=${profileRoot()}`, `--profile-directory=${settings.chromeProfile}`];
 }
 
 // Is a browser of this kind already running? If so its profile is locked and
@@ -88,16 +91,53 @@ export async function open({ fresh = false } = {}) {
   assertLive('browser');
   if (socket && socket.readyState === 1) return { ok: true, reused: true };
 
-  // Something already listening on the port is a browser Woboo can drive,
-  // whoever started it.
+  const exe = browserPath();
+  if (!exe) return { ok: false, error: 'no Chrome or Edge found to drive' };
+  const which = /chrome\.exe$/i.test(exe) ? 'Chrome' : 'Edge';
+  const exeName = which === 'Chrome' ? 'chrome.exe' : 'msedge.exe';
+  const settings = loadSettings();
+  const wantsReal = settings.browserProfile === 'mine';
+
+  // Decide whose browser this is BEFORE attaching to anything. A debuggable
+  // browser left over from an earlier run will happily accept a connection, and
+  // attaching to it would quietly ignore the profile the owner chose — acting as
+  // the wrong account while reporting success.
+  let profileDir = settings.chromeProfile;
+  if (wantsReal && !profileDir) {
+    const choices = listProfiles();
+    if (!choices.length) {
+      return { ok: false, error: `no ${which} profile found to use` };
+    }
+    if (choices.length === 1) {
+      profileDir = choices[0].dir;
+    } else {
+      // Ask, wherever the owner is — the widget, the console, or their phone —
+      // and keep the answer. Guessing here means acting as the wrong person.
+      profileDir = await consult.ask({
+        key: 'browser.profile',
+        question: `Which ${which} profile should Woboo use?`,
+        detail: 'It will act as that account: its mail, its logins, its sessions.',
+        options: choices.map((p) => ({
+          label: `${p.name}${p.email ? ` — ${p.email}` : ''}`,
+          value: p.dir,
+        })),
+      });
+      if (!profileDir) {
+        return {
+          ok: false,
+          needsProfile: choices,
+          error:
+            `Woboo asked which ${which} profile to use and got no answer. ` +
+            `Choose one with \`woboo browser use "<name>"\`, or answer the question in Telegram.`,
+        };
+      }
+      saveSettings({ chromeProfile: profileDir });
+    }
+  }
+
+  // Something already listening on the port is a browser Woboo can drive.
   let page = await waitForBrowser(1);
   if (!page) {
-    const exe = browserPath();
-    if (!exe) return { ok: false, error: 'no Chrome or Edge found to drive' };
-    const which = /chrome\.exe$/i.test(exe) ? 'Chrome' : 'Edge';
-    const exeName = which === 'Chrome' ? 'chrome.exe' : 'msedge.exe';
-    const wantsReal = loadSettings().browserProfile === 'mine';
-
     if (wantsReal && (await alreadyRunning(exeName))) {
       return {
         ok: false,

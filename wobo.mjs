@@ -226,6 +226,40 @@ async function cmdBrowser(args, flags) {
   const { browserPath } = await import('./src/toolbox.mjs');
   const { script } = await import('./src/ps.mjs');
 
+  const { listProfiles } = await import('./src/toolbox.mjs');
+
+  // Pick by the name the owner sees in their browser, not a directory called
+  // "Profile 3" that means nothing to anyone.
+  if (args[0] === 'use') {
+    const wanted = args.slice(1).join(' ').trim().toLowerCase();
+    const profiles = listProfiles();
+    const match = profiles.find(
+      (p) => p.name.toLowerCase() === wanted || p.dir.toLowerCase() === wanted || p.email.toLowerCase() === wanted,
+    );
+    if (!match) {
+      say(red(`  no profile called "${args.slice(1).join(' ')}".`));
+      for (const p of profiles) say(dim(`    ${p.name}${p.email ? ` — ${p.email}` : ''}`));
+      return 2;
+    }
+    saveSettings({ browserProfile: 'mine', chromeProfile: match.dir });
+    say(green(`  Woboo will use ${match.name}${match.email ? ` (${match.email})` : ''}`));
+    say(dim('  it acts as that account: its logins, its mail, its sessions.'));
+    return 0;
+  }
+
+  if (args[0] === 'profiles') {
+    const profiles = listProfiles();
+    if (!profiles.length) return say(dim('  no browser profiles found.')) || 0;
+    const chosen = loadSettings().chromeProfile;
+    for (const p of profiles) {
+      const mark = p.dir === chosen ? green(' *') : '  ';
+      say(`${mark} ${p.name.padEnd(16)} ${dim(p.email || '—')} ${p.lastUsed ? dim('(last used)') : ''}`);
+    }
+    say('');
+    say(dim('  woboo browser use "<name>"'));
+    return 0;
+  }
+
   if (args[0] === 'mine' || args[0] === 'own') {
     const next = saveSettings({ browserProfile: args[0] });
     say(green(`  browser profile = ${next.browserProfile}`));

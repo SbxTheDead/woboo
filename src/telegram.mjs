@@ -16,6 +16,7 @@ import { loadSettings, saveSettings } from './config.mjs';
 import { subscribe } from './bus.mjs';
 import { record, tail } from './journal.mjs';
 import * as guard from './guard.mjs';
+import * as consult from './consult.mjs';
 import * as foreman from './foreman.mjs';
 import * as eyes from './eyes.mjs';
 import * as memory from './memory.mjs';
@@ -111,6 +112,26 @@ export async function start({ token, onPairCode } = {}) {
                 { text: '⛔ Deny', callback_data: `no:${id}` },
               ],
             ],
+          },
+        },
+      );
+      return;
+    }
+
+    // A question Woboo cannot answer for itself. Buttons, because typing an
+    // exact profile name on a phone is how people pick the wrong one.
+    if (event.type === 'consult') {
+      const { id, question, detail, options, timeout } = event.request;
+      tell(
+        `🤔 <b>${esc(question)}</b>${detail ? `\n<i>${esc(detail)}</i>` : ''}\n\n` +
+          `<i>Woboo will remember this answer.</i>`,
+        {
+          reply_markup: {
+            // One per row: option labels are long enough that side-by-side
+            // buttons truncate to uselessness.
+            inline_keyboard: options.slice(0, 8).map((o, i) => [
+              { text: o.label.slice(0, 60), callback_data: `c:${id}:${i}` },
+            ]),
           },
         },
       );
@@ -259,7 +280,32 @@ export async function start({ token, onPairCode } = {}) {
   async function handleCallback(query) {
     const chatId = query.message?.chat?.id;
     if (!owner || chatId !== owner) return;
-    const [verdict, id] = String(query.data || '').split(':');
+    const parts = String(query.data || '').split(':');
+
+    // A consultation carries three parts, an approval two.
+    if (parts[0] === 'c') {
+      const [, id, index] = parts;
+      const request = consult.pending().find((r) => r.id === id);
+      const chosen = request?.options?.[Number(index)];
+      const took = chosen ? consult.answer(id, chosen.value) : false;
+      await bot.call('answerCallbackQuery', {
+        callback_query_id: query.id,
+        text: took ? `Chose ${chosen.label}`.slice(0, 60) : 'too late — that question expired',
+      });
+      if (took) {
+        await bot
+          .call('editMessageReplyMarkup', {
+            chat_id: chatId,
+            message_id: query.message.message_id,
+            reply_markup: { inline_keyboard: [] },
+          })
+          .catch(() => {});
+        await tell(`✅ <b>${esc(chosen.label)}</b> — remembered, so you will not be asked again.`);
+      }
+      return;
+    }
+
+    const [verdict, id] = parts;
     const handled = guard.resolveApproval(id, verdict === 'ok' ? 'allow' : 'deny');
     await bot.call('answerCallbackQuery', {
       callback_query_id: query.id,

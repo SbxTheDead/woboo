@@ -41,6 +41,10 @@ const DEFAULTS = {
   // take anything from — safe, but logged in to nothing. 'mine' uses your real
   // Chrome profile, so it acts as you: your Gmail, your sessions, your history.
   browserProfile: 'own',
+  // Which of the owner's browser profiles to drive, by directory name. Null
+  // means unchosen — Woboo asks rather than guessing, because the wrong
+  // profile is the wrong person's inbox.
+  chromeProfile: null,
   // How Woboo prefers to work. 'gui' makes it use the real mouse and keyboard
   // wherever a task could plausibly be done on screen — you watch it happen.
   // 'commands' keeps everything invisible and scriptable. 'auto' lets the plan
