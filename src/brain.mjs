@@ -89,6 +89,20 @@ reporting back. Plan for that shape:
   screen and drive the mouse and keyboard itself. State the goal, not the clicks —
   it decides where to click by looking. Prefer "shell" when a command would do the
   same job, because a command can be verified and a click cannot.
+- Write every shell command for the platform's real shell. On win32 that is
+  PowerShell, never cmd.exe: use Test-Path, New-Item, $LASTEXITCODE. cmd-isms
+  like "if exist X exit 0 else exit 1", %VAR% or 2>NUL are parse errors there and
+  fail every single time. Elsewhere, write POSIX sh.
+- Quote paths with single quotes, not double: 'C:\\some\\path'. These commands
+  travel through JSON, and a double quote has to be escaped on the way, which is
+  where malformed commands come from. Single quotes need no escaping and are
+  literal in PowerShell, which is what a path wants anyway.
+- Do not assume a tool is installed. Build steps on git, node, npm, python or the
+  project's own scripts; planning around pandoc, curl, wget or jq when they may
+  be absent produces a step that cannot run.
+- A "shell" step cannot browse the web. If a task needs information from the
+  internet and no coding tool is available to fetch it, say so plainly in the
+  summary and plan only what can actually be done.
 - Keep the plan short. Two good steps beat six speculative ones.
 
 Deliver what the owner asked for at the scope they intended. Do not widen the task.`;
@@ -237,6 +251,14 @@ ${task}
 Workspace: ${workspace}
 Coding tool available for delegation: ${crew || 'none installed — avoid "delegate" steps and use "shell" instead'}
 Platform: ${process.platform}
+Shell commands run in: ${process.platform === 'win32' ? 'PowerShell (not cmd.exe)' : '/bin/sh'}
+
+What Woboo can actually do right now:
+- run shell commands in the workspace${crew ? '' : ' (this is the only way to act)'}
+${crew ? `- hand a written spec to ${crew}, which can read and write files and reach the web` : '- it CANNOT reach the internet: no coding tool is installed, and a shell step has no way to browse or download'}
+- look at the screen, and drive the mouse and keyboard in a "computer" step
+If the task needs something in that gap, say so in the summary rather than
+planning a step that cannot possibly work.
 ${
   memory
     ? `

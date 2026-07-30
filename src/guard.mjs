@@ -92,6 +92,11 @@ const ALLOWED = new Set([
   'python', 'python3', 'py', 'pip', 'pytest', 'ruff', 'uv',
   'jest', 'vitest', 'tsc', 'eslint', 'prettier', 'make',
   'echo', 'where', 'which', 'dir', 'ls', 'cat', 'type',
+  // Reading paths, and creating them. Deletion is deliberately absent: the
+  // FORBIDDEN patterns below refuse recursive removal outright, and anything
+  // else destructive still has to come and ask.
+  'mkdir', 'test-path', 'new-item', 'get-content', 'get-childitem',
+  'join-path', 'resolve-path', 'select-string', 'out-file', 'set-content',
 ]);
 
 // Patterns that are never worth asking about. Ordered roughly by how bad.
