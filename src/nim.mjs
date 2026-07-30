@@ -135,6 +135,16 @@ async function ask({ system, prompt, schema, name, maxTokens = 8000, think = tru
     response = await post();
   }
 
+  // A free allowance shares workers, so "all 32 busy" is routine rather than
+  // broken — two missions starting together is enough to hit it. Wait and try
+  // again instead of throwing the plan away over a queue that clears in seconds.
+  for (let attempt = 1; attempt <= 4 && (response.status === 503 || response.status === 429); attempt += 1) {
+    const wait = attempt * 4000;
+    record('brain', `NIM busy (${response.status}); retrying in ${wait / 1000}s`, { level: 'warn' });
+    await new Promise((resolve) => setTimeout(resolve, wait));
+    response = await post();
+  }
+
   if (!response.ok) {
     const detail = await response.text().catch(() => '');
     throw new Error(`NIM ${response.status}: ${detail.slice(0, 200) || response.statusText}`);

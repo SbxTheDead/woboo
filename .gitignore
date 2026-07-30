@@ -18,3 +18,7 @@ STOP
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Mission artifacts — output Woboo produced, not source.
+elephant_research/
+*.pdf

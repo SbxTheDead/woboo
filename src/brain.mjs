@@ -317,7 +317,7 @@ to change, and do not restate the whole original task.`;
 // Deliberately dumb and completely predictable: hand the whole task to the
 // coding tool, then run whatever test command the project already defines.
 
-export function offlinePlan({ task, workspace, crew }) {
+export function offlinePlan({ task, workspace, crew, reason = '' }) {
   const verify = guessVerify(workspace);
   const steps = [];
 
@@ -347,7 +347,9 @@ export function offlinePlan({ task, workspace, crew }) {
   }
 
   return {
-    summary: `Offline plan (no brain credentials): ${task}`,
+    // Say which it was. "No credentials" when the real cause was a busy server
+    // sends the owner off checking their key for no reason.
+    summary: `Offline plan (${reason || 'no brain credentials'}): ${task}`,
     steps,
     offline: true,
   };

@@ -85,7 +85,12 @@ export async function runMission(task, { workspace } = {}) {
         // A brain that is unreachable or declines should not end the mission —
         // fall back to the deterministic plan and say so.
         record('brain', `planning failed (${err.message}); using the offline plan`, { level: 'warn' });
-        plan = brain.offlinePlan({ task, workspace: cwd, crew: mission.crew });
+        plan = brain.offlinePlan({
+          task,
+          workspace: cwd,
+          crew: mission.crew,
+          reason: `the brain was unreachable: ${err.message.slice(0, 90)}`,
+        });
       }
     } else {
       plan = brain.offlinePlan({ task, workspace: cwd, crew: mission.crew });
