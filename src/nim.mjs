@@ -1,0 +1,174 @@
+// A second brain: NVIDIA NIM.
+//
+// NIM hosts a large catalogue behind an OpenAI-compatible endpoint and hands out
+// free credits, which makes it the cheapest way to give Woboo a real planner
+// while you are still deciding whether you like it. Get a key at
+// https://build.nvidia.com — sign in, pick a model, "Get API Key" — then:
+//
+//   woboo secret nvidia nvapi-...
+//   woboo set provider nim
+//
+// Deliberately written against raw HTTP rather than an SDK: it is one endpoint
+// with one JSON shape, and Woboo's whole point is not needing a toolchain.
+//
+// What it can and cannot do:
+//   * plan() and repair() — yes. Those are structured-output calls and NIM
+//     models handle them well.
+//   * the pilot (driving the screen) — no. That needs Anthropic's computer-use
+//     tool protocol, which is not part of the OpenAI-compatible surface. Woboo
+//     says so plainly rather than pretending.
+
+import { loadSettings, loadSecrets } from './config.mjs';
+import { record } from './journal.mjs';
+
+const BASE = 'https://integrate.api.nvidia.com/v1';
+
+// Picked from the live catalogue for planning work. The default is a
+// mixture-of-experts model: 120B total but only ~12B active per token, so it is
+// quick and cheap on a free allowance while still reasoning properly.
+export const SUGGESTED = [
+  { id: 'nvidia/nemotron-3-super-120b-a12b', note: 'default — MoE, fast and strong at planning' },
+  { id: 'nvidia/nemotron-3-ultra-550b-a55b', note: 'the heaviest NVIDIA model; slower, best quality' },
+  { id: 'deepseek-ai/deepseek-v4-pro', note: 'strong reasoning' },
+  { id: 'moonshotai/kimi-k2.6', note: 'strong at agentic, tool-shaped tasks' },
+  { id: 'openai/gpt-oss-120b', note: 'open-weight GPT, reliable JSON' },
+  { id: 'meta/llama-3.3-70b-instruct', note: 'dependable baseline' },
+];
+
+export const DEFAULT_MODEL = SUGGESTED[0].id;
+
+export function apiKey() {
+  return loadSecrets().nvidiaApiKey || process.env.NVIDIA_API_KEY || '';
+}
+
+export function hasCredentials() {
+  return Boolean(apiKey());
+}
+
+export function model() {
+  return loadSettings().nimModel || DEFAULT_MODEL;
+}
+
+export async function listModels() {
+  const response = await fetch(`${BASE}/models`, {
+    headers: apiKey() ? { authorization: `Bearer ${apiKey()}` } : {},
+  });
+  if (!response.ok) throw new Error(`NIM listing failed (${response.status})`);
+  const body = await response.json();
+  return body.data.map((m) => m.id);
+}
+
+// Some models honour response_format json_schema, some ignore it, and a few
+// reject it outright. Rather than maintain a compatibility table that rots, ask
+// for the schema, and parse defensively either way.
+function extractJson(text) {
+  const trimmed = String(text || '').trim();
+  // Reasoning models often narrate before the JSON, and some wrap it in a fence.
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
+  const candidate = fenced ? fenced[1] : trimmed;
+  try {
+    return JSON.parse(candidate);
+  } catch {
+    // Fall back to the outermost balanced object in the response.
+    const start = candidate.indexOf('{');
+    const end = candidate.lastIndexOf('}');
+    if (start >= 0 && end > start) {
+      try {
+        return JSON.parse(candidate.slice(start, end + 1));
+      } catch {
+        // Give up below with the raw text, which is more useful than a guess.
+      }
+    }
+  }
+  throw new Error(`NIM returned something unparseable:\n${trimmed.slice(0, 400)}`);
+}
+
+async function ask({ system, prompt, schema, name, maxTokens = 4000 }) {
+  const key = apiKey();
+  if (!key) throw new Error('no NVIDIA key — run `woboo secret nvidia nvapi-...`');
+
+  const body = {
+    model: model(),
+    max_tokens: maxTokens,
+    temperature: 0.2,
+    messages: [
+      { role: 'system', content: system },
+      {
+        role: 'user',
+        content: `${prompt}\n\nReply with JSON only, matching this schema exactly. No prose, no code fence:\n${JSON.stringify(schema)}`,
+      },
+    ],
+    response_format: { type: 'json_schema', json_schema: { name, schema, strict: true } },
+  };
+
+  let response = await fetch(`${BASE}/chat/completions`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  // A model that will not take a schema still takes the instruction in the
+  // prompt, so drop the parameter rather than the request.
+  if (response.status === 400 || response.status === 422) {
+    delete body.response_format;
+    response = await fetch(`${BASE}/chat/completions`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  }
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    throw new Error(`NIM ${response.status}: ${detail.slice(0, 200) || response.statusText}`);
+  }
+
+  const payload = await response.json();
+  const choice = payload.choices?.[0];
+  if (!choice) throw new Error('NIM returned no choices');
+  // Reasoning models put the answer in `content` and their thinking elsewhere;
+  // either way `content` is what we want.
+  const data = extractJson(choice.message?.content);
+  return { data, usage: payload.usage, model: payload.model };
+}
+
+// ── the two calls the foreman makes ───────────────────────────────────────────
+// Same shapes brain.mjs produces, so the foreman cannot tell which brain it got.
+
+export async function plan({ task, workspace, crew, memory = '', schema, system }) {
+  const prompt = `Owner's task:
+${task}
+
+Workspace: ${workspace}
+Coding tool available for delegation: ${crew || 'none installed — avoid "delegate" steps and use "shell" instead'}
+Platform: ${process.platform}
+${memory ? `\nWhat Woboo already knows about this workspace:\n\n${memory}\n` : ''}
+Produce the plan.`;
+
+  const { data, usage, model: used } = await ask({ system, prompt, schema, name: 'plan', maxTokens: 6000 });
+  record('brain', `planned ${data.steps?.length ?? 0} step(s) with ${used}`, {
+    level: 'ok',
+    usage: usage && { in: usage.prompt_tokens, out: usage.completion_tokens },
+  });
+  return data;
+}
+
+export async function repair({ task, step, failure, attempt, schema, system }) {
+  const prompt = `While working on: ${task}
+
+Step "${step.title}" was handed to the coding tool with this instruction:
+${step.instruction}
+
+Its verify command was:
+${step.verify}
+
+That command failed (attempt ${attempt}). Output:
+${failure.slice(0, 6000)}
+
+Write a corrected instruction for the coding tool. Quote the specific error, say what
+to change, and do not restate the whole original task.`;
+
+  const { data } = await ask({ system, prompt, schema, name: 'repair', maxTokens: 3000 });
+  record('brain', `diagnosis: ${data.diagnosis}`, { level: 'warn' });
+  return data;
+}

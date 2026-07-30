@@ -1,0 +1,168 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Woboo</title>
+<style>
+  /* The launcher. Frameless and transparent — everything you see is drawn.
+     The boot lines are real checks, not a fake progress bar: Woboo is genuinely
+     finding the crew and waking the brain while you watch it. */
+  html, body {
+    margin: 0; height: 100%; background: transparent; overflow: hidden;
+    font: 12px/1.5 ui-monospace, SFMono-Regular, "Cascadia Mono", Consolas, monospace;
+    color: #F5F1EC; user-select: none; cursor: default;
+  }
+  :root { --fc: #FFB55C; }
+
+  .card {
+    position: relative; height: 100%; box-sizing: border-box;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 26px 26px 20px;
+    border-radius: 20px;
+    background:
+      radial-gradient(120% 80% at 50% -10%, rgba(255,120,70,.14) 0%, transparent 60%),
+      linear-gradient(165deg, #12100F 0%, #0A0809 60%, #08080B 100%);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.05),
+      0 0 0 1px rgba(0,0,0,.7),
+      0 24px 60px rgba(0,0,0,.6);
+    -webkit-app-region: drag;
+    overflow: hidden;
+  }
+  /* A slow sweep of light, so the card feels alive while it works. */
+  .card::before {
+    content: ''; position: absolute; inset: -40%;
+    background: conic-gradient(from 0deg, transparent 0 82%, rgba(255,120,70,.22) 92%, transparent 100%);
+    animation: sweep 6s linear infinite; pointer-events: none;
+  }
+  @keyframes sweep { to { transform: rotate(360deg); } }
+  .card::after {
+    content: ''; position: absolute; inset: 1px; border-radius: 19px;
+    background: inherit; pointer-events: none;
+    background:
+      radial-gradient(120% 80% at 50% -10%, rgba(255,120,70,.14) 0%, transparent 60%),
+      linear-gradient(165deg, #12100F 0%, #0A0809 60%, #08080B 100%);
+  }
+  .card > * { position: relative; z-index: 1; }
+
+  .head {
+    position: relative; width: 132px; height: 108px; flex: none;
+    border-radius: 62px 62px 42px 42px;
+    background: radial-gradient(85% 60% at 32% 12%, #FFFDF9 0%, transparent 60%), linear-gradient(168deg, #F3EBE0 0%, #EBE1D4 58%, #E4D8C8 100%);
+    box-shadow: inset 0 2px 3px rgba(255,255,255,.9), inset 0 -6px 12px rgba(160,132,110,.28), 0 14px 28px rgba(0,0,0,.5), 0 0 40px -10px var(--fc);
+    transition: box-shadow .6s ease;
+  }
+  .head::before {
+    content: ''; position: absolute; inset: 0; border-radius: 62px 62px 42px 42px;
+    border: none; opacity: 0; transition: border-color .6s ease;
+  }
+  .antenna {
+    position: absolute; top: -22px; left: 50%; transform: translateX(-50%);
+    width: 8px; height: 23px; background: repeating-linear-gradient(155deg,#E4D8C8 0 2px, rgba(0,0,0,.12) 2px 4px); border-radius: 4px;
+  }
+  .antenna::after {
+    content: ''; position: absolute; top: -9px; left: 50%; transform: translateX(-50%);
+    width: 11px; height: 11px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #FFE7C4, var(--fc) 55%, #FF6B3D 100%); box-shadow: 0 0 14px var(--fc), 0 0 30px -6px #FF6B3D;
+    animation: breathe 2.4s ease-in-out infinite;
+  }
+  @keyframes breathe { 0%,100% { opacity:.3 } 50% { opacity:1 } }
+  .screen {
+    position: absolute; left: 14px; right: 14px; top: 14px; height: 70px; border-radius: 38px / 34px; overflow: hidden;
+    background: radial-gradient(120% 95% at 50% 6%, #241C18 0%, #100B09 60%, #080505 100%);
+    box-shadow: 0 0 0 5px #FF6B3D, inset 0 3px 8px rgba(0,0,0,.9);
+  }
+  .screen::after {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: repeating-linear-gradient(to bottom, rgba(255,255,255,.035) 0 1px, transparent 1px 3px);
+  }
+  #face { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+  .brand {
+    margin-top: 16px; font-size: 20px; font-weight: 700;
+    letter-spacing: 9px; text-indent: 9px; color: #FFFFFF;
+  }
+  .tagline { margin-top: 2px; color: rgba(255,255,255,.38); font-size: 10.5px; letter-spacing: .5px; }
+
+  .rail {
+    margin-top: 18px; width: 100%; height: 2px; border-radius: 2px;
+    background: rgba(255,255,255,.08); overflow: hidden;
+  }
+  .rail i {
+    display: block; height: 100%; width: 0%;
+    background: linear-gradient(90deg, transparent, var(--fc));
+    box-shadow: 0 0 10px var(--fc);
+    transition: width .45s cubic-bezier(.22,.9,.3,1), background .6s ease;
+  }
+
+  .steps { margin-top: 12px; width: 100%; flex: 1; min-height: 0; overflow: hidden; }
+  .step {
+    display: flex; gap: 8px; align-items: baseline; padding: 1.5px 0;
+    color: rgba(255,255,255,.38); opacity: 0; transform: translateY(4px);
+    animation: rise .28s ease forwards;
+  }
+  @keyframes rise { to { opacity: 1; transform: none; } }
+  .step .g { width: 10px; flex: none; text-align: center; }
+  .step.ok { color: rgba(255,255,255,.62); }
+  .step.ok .g { color: var(--fc); }
+  .step.warn { color: #FF9264; }
+  .step.warn .g { color: #FF9264; }
+  .step .detail { color: rgba(255,255,255,.3); margin-left: auto; font-size: 10.5px; }
+
+  .foot { margin-top: auto; padding-top: 8px; color: rgba(255,255,255,.28); font-size: 10px; letter-spacing: 1px; }
+</style>
+
+<div class="card">
+  <div class="head" id="head">
+    <div class="antenna"></div>
+    <div class="screen"><svg id="face" viewBox="0 0 240 160" preserveAspectRatio="xMidYMid meet"></svg></div>
+  </div>
+
+  <div class="brand">WOBOO</div>
+  <div class="tagline">a body for your AI</div>
+
+  <div class="rail"><i id="bar"></i></div>
+  <div class="steps" id="steps"></div>
+  <div class="foot" id="foot">starting…</div>
+</div>
+
+<style id="face-css"></style>
+
+<script>
+  var $ = function (id) { return document.getElementById(id); };
+  var total = 6;
+  var done = 0;
+
+  function esc(t) {
+    return String(t == null ? '' : t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  window.wobo.onFace(function (painted) {
+    $('face').innerHTML = painted.svg;
+    document.documentElement.style.setProperty('--fc', painted.color);
+  });
+
+  // Each line is a real check that just finished — the launcher is showing you
+  // the boot, not animating a stand-in for it.
+  window.wobo.onBoot(function (step) {
+    if (step.done) {
+      $('foot').textContent = 'ready';
+      $('bar').style.width = '100%';
+      return;
+    }
+    done += 1;
+    $('bar').style.width = Math.min(100, Math.round((done / total) * 100)) + '%';
+    $('foot').textContent = step.label;
+
+    var el = document.createElement('div');
+    el.className = 'step ' + (step.level || 'ok');
+    el.innerHTML = '<span class="g">' + (step.level === 'warn' ? '!' : '+') + '</span>' +
+      '<span>' + esc(step.label) + '</span>' +
+      '<span class="detail">' + esc(step.detail || '') + '</span>';
+    $('steps').appendChild(el);
+    while ($('steps').childElementCount > 7) $('steps').removeChild($('steps').firstElementChild);
+  });
+
+  window.wobo.snapshot().then(function (snap) {
+    $('face-css').textContent = snap.css;
+    $('face').setAttribute('viewBox', snap.viewBox);
+  });
+</script>

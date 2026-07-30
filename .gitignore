@@ -1,0 +1,20 @@
+node_modules/
+package-lock.json
+*.log
+
+# Wobo's runtime state normally lives in ~/.wobo, but never commit a stray copy:
+# owner.key is a credential and shots/ are pictures of your screen.
+.wobo/
+owner.key
+secrets.json
+journal.jsonl
+shots/
+memory/
+STOP
+
+.env
+.env.*
+
+.DS_Store
+Thumbs.db
+desktop.ini

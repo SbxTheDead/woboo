@@ -1,0 +1,130 @@
+// Where Woboo keeps its brain-state on disk, and the knobs an owner can turn.
+
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import crypto from 'node:crypto';
+
+export const HOME =
+  process.env.WOBOO_HOME || process.env.WOBO_HOME || path.join(os.homedir(), '.woboo');
+
+// Woboo used to keep its state in ~/.wobo. Move it rather than orphan it: the
+// owner key, the paired Telegram chat, the secrets and everything Woboo has
+// learned about your workspaces all live in there, and silently starting fresh
+// would look exactly like amnesia.
+(function migrateHome() {
+  if (process.env.WOBOO_HOME || process.env.WOBO_HOME) return;
+  const old = path.join(os.homedir(), '.wobo');
+  try {
+    if (fs.existsSync(old) && !fs.existsSync(HOME)) fs.renameSync(old, HOME);
+  } catch {
+    // A locked file or a cross-device link — Woboo starts fresh rather than
+    // refusing to boot, and the old directory is left untouched for the owner.
+  }
+})();
+export const PATHS = {
+  home: HOME,
+  journal: path.join(HOME, 'journal.jsonl'),
+  ownerKey: path.join(HOME, 'owner.key'),
+  stop: path.join(HOME, 'STOP'),
+  settings: path.join(HOME, 'settings.json'),
+  secrets: path.join(HOME, 'secrets.json'),
+  shots: path.join(HOME, 'shots'),
+};
+
+const DEFAULTS = {
+  port: 4477,
+  // Which brain plans: 'auto' (Anthropic, else NIM), 'anthropic', or 'nim'.
+  provider: 'auto',
+  // The NVIDIA NIM model used when provider resolves to 'nim'.
+  nimModel: 'nvidia/nemotron-3-super-120b-a12b',
+  // The brain. Opus 5 is the default; effort is the intelligence/cost dial.
+  model: 'claude-opus-5',
+  effort: 'high',
+  // Which installed coding tool Woboo delegates to. 'auto' picks the first found.
+  crew: 'auto',
+  // Where missions run. null means "wherever wobo was started from".
+  workspace: null,
+  // How much rope the hands get: 'ask' (owner confirms each act), 'allow', 'off'.
+  hands: 'ask',
+  // How many times a failed verify may be handed back to the crew.
+  maxRepairs: 2,
+  // Seconds an approval request waits before it auto-denies.
+  approvalTimeout: 120,
+  // Extra executables the owner trusts, on top of the built-in allowlist.
+  allowCommands: [],
+  // The one Telegram chat allowed to drive Woboo. Set by pairing, not by hand.
+  telegramChatId: null,
+};
+
+export function ensureHome() {
+  fs.mkdirSync(HOME, { recursive: true });
+  fs.mkdirSync(PATHS.shots, { recursive: true });
+}
+
+export function loadSettings() {
+  ensureHome();
+  let onDisk = {};
+  try {
+    onDisk = JSON.parse(fs.readFileSync(PATHS.settings, 'utf8'));
+  } catch {
+    // First run, or a hand-edited file that no longer parses. Defaults are safe.
+  }
+  return { ...DEFAULTS, ...onDisk };
+}
+
+export function saveSettings(patch) {
+  const next = { ...loadSettings(), ...patch };
+  fs.writeFileSync(PATHS.settings, `${JSON.stringify(next, null, 2)}\n`);
+  return next;
+}
+
+// ── secrets ───────────────────────────────────────────────────────────────────
+// Credentials live in one 0600 file rather than scattered across environment
+// variables, so "set this up once" is a real thing rather than a shell ritual.
+// Never settings.json — that file is meant to be readable and hand-editable.
+
+export function loadSecrets() {
+  ensureHome();
+  let secrets = {};
+  try {
+    secrets = JSON.parse(fs.readFileSync(PATHS.secrets, 'utf8'));
+  } catch {
+    // None stored; environment variables may still supply them.
+  }
+  // The SDK looks at the environment, so put the key where it will be found —
+  // without clobbering a key the owner exported deliberately.
+  if (secrets.anthropicApiKey && !process.env.ANTHROPIC_API_KEY) {
+    process.env.ANTHROPIC_API_KEY = secrets.anthropicApiKey;
+  }
+  return secrets;
+}
+
+export function saveSecret(name, value) {
+  ensureHome();
+  let secrets = {};
+  try {
+    secrets = JSON.parse(fs.readFileSync(PATHS.secrets, 'utf8'));
+  } catch {
+    // First secret.
+  }
+  if (value === null) delete secrets[name];
+  else secrets[name] = value;
+  fs.writeFileSync(PATHS.secrets, `${JSON.stringify(secrets, null, 2)}\n`, { mode: 0o600 });
+  return Object.keys(secrets);
+}
+
+// The owner lock. One secret, generated once, that every API call must carry.
+// Without it a process on this machine could drive Woboo; with it, only you can.
+export function ownerKey() {
+  ensureHome();
+  try {
+    const existing = fs.readFileSync(PATHS.ownerKey, 'utf8').trim();
+    if (existing.length >= 32) return existing;
+  } catch {
+    // Not minted yet.
+  }
+  const minted = crypto.randomBytes(24).toString('hex');
+  fs.writeFileSync(PATHS.ownerKey, `${minted}\n`, { mode: 0o600 });
+  return minted;
+}

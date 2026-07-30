@@ -1,0 +1,28 @@
+{
+  "name": "wobo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A body for your AI. Give Woboo a task; it operates your PC, drives your coding tools, and tests the work before handing it back.",
+  "author": "Rayane Sbaa <jbeyer52777@protonmail.com> (SbxTheDead)",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "wobo": "./wobo.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node wobo.mjs widget",
+    "widget": "electron desktop/main.mjs",
+    "panel": "node wobo.mjs up",
+    "doctor": "node wobo.mjs doctor",
+    "selftest": "node wobo.mjs selftest"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.72.0"
+  },
+  "devDependencies": {
+    "electron": "^43.2.0"
+  }
+}

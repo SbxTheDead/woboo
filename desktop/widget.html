@@ -1,0 +1,409 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Woboo</title>
+<style>
+  /* The window is transparent; everything visible below is drawn, not chrome. */
+  html, body {
+    margin: 0; height: 100%; background: transparent; overflow: hidden;
+    font: 12px/1.45 ui-monospace, SFMono-Regular, "Cascadia Mono", Consolas, monospace;
+    color: #F5F1EC; user-select: none; cursor: default;
+  }
+  /* Brand, from the site: near-black ground, coral accent, warm amber pixels.
+     The chassis is the character — cream shell, coral bezel, glossy dark glass. */
+  :root {
+    --fc: #FFB55C;
+    --coral: #FF6B3D;
+    --coral2: #FF9264;
+    --cream: #F3EBE0;
+    --cream2: #E4D8C8;
+    --ink: #F5F1EC;
+    --muted: rgba(255,255,255,.56);
+    --faint: rgba(255,255,255,.09);
+    --panel: rgba(14,12,14,.94);
+  }
+
+  .stage {
+    height: 100%; display: flex; flex-direction: column; align-items: center;
+    padding: 10px 12px 12px; gap: 8px; box-sizing: border-box;
+  }
+
+  /* ── the head ───────────────────────────────────────────────────────────── */
+  /* Dragging the head moves the window, which is what you reach for first.    */
+  /* The cream shell. Egg-ish rather than square — wider radius at the top than
+     the bottom is what stops it reading as a phone. */
+  .head {
+    position: relative; width: 200px; height: 168px; flex: none;
+    border-radius: 92px 92px 62px 62px;
+    background:
+      radial-gradient(85% 60% at 32% 12%, #FFFDF9 0%, transparent 60%),
+      linear-gradient(168deg, var(--cream) 0%, #EBE1D4 58%, var(--cream2) 100%);
+    box-shadow:
+      inset 0 2px 3px rgba(255,255,255,.9),
+      inset 0 -8px 16px rgba(160,132,110,.28),
+      0 18px 34px rgba(0,0,0,.55),
+      0 0 42px -12px var(--fc);
+    -webkit-app-region: drag;
+    transition: box-shadow .4s ease;
+  }
+
+  /* Spring antenna with the glowing bulb — the character's tell. */
+  .antenna {
+    position: absolute; top: -26px; left: 50%; transform: translateX(-50%);
+    width: 10px; height: 27px;
+    background:
+      repeating-linear-gradient(155deg, var(--cream2) 0 2px, rgba(0,0,0,.12) 2px 4px);
+    -webkit-mask-image: linear-gradient(#000 0 0);
+    border-radius: 5px; opacity: .95;
+  }
+  .antenna::after {
+    content: ''; position: absolute; top: -11px; left: 50%; transform: translateX(-50%);
+    width: 14px; height: 14px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #FFE7C4, var(--fc) 55%, var(--coral) 100%);
+    box-shadow: 0 0 16px var(--fc), 0 0 34px -6px var(--coral);
+    animation: breathe 3.2s ease-in-out infinite;
+  }
+  @keyframes breathe { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+
+  /* Coral bezel around glossy dark glass. */
+  .screen {
+    position: absolute; left: 20px; right: 20px; top: 22px; height: 108px;
+    border-radius: 58px / 52px; overflow: hidden;
+    background: radial-gradient(120% 95% at 50% 6%, #241C18 0%, #100B09 60%, #080505 100%);
+    box-shadow:
+      0 0 0 7px var(--coral),
+      0 0 0 8px rgba(0,0,0,.22),
+      inset 0 3px 10px rgba(0,0,0,.9);
+  }
+  /* The highlight that makes it read as curved glass rather than a hole. */
+  .screen::before {
+    content: ''; position: absolute; left: 8%; top: 5%; width: 58%; height: 42%;
+    border-radius: 50%; pointer-events: none;
+    background: linear-gradient(160deg, rgba(255,255,255,.16), transparent 70%);
+  }
+  .screen::after {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: repeating-linear-gradient(to bottom, rgba(255,255,255,.03) 0 1px, transparent 1px 3px);
+  }
+  #face { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+  /* Little coral arms, peeking out at the sides. */
+  .vent {
+    position: absolute; top: 104px; width: 16px; height: 40px;
+    background: linear-gradient(180deg, var(--coral2), var(--coral));
+    box-shadow: inset 0 2px 3px rgba(255,255,255,.35);
+  }
+  .vent.l { left: -9px; border-radius: 12px 4px 12px 12px; transform: rotate(6deg); }
+  .vent.r { right: -9px; border-radius: 4px 12px 12px 12px; transform: rotate(-6deg); }
+
+  .status { flex: none; text-align: center; -webkit-app-region: drag; }
+  .status b { color: var(--fc); letter-spacing: 2.5px; text-transform: uppercase; font-weight: 700; font-size: 11px; }
+  .status span { display: block; color: rgba(255,255,255,.5); font-size: 10.5px; height: 14px; overflow: hidden; }
+
+  /* ── the panel ──────────────────────────────────────────────────────────── */
+  .panel {
+    width: 100%; flex: 1; min-height: 0; display: none; flex-direction: column; gap: 7px;
+    -webkit-app-region: no-drag;
+  }
+  body.expanded .panel { display: flex; }
+
+  .ask { display: flex; gap: 6px; }
+  #task {
+    flex: 1; min-width: 0; font: inherit; color: #F5F1EC; padding: 7px 9px;
+    background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1); border-radius: 6px;
+  }
+  #task:focus { outline: none; border-color: var(--fc); }
+
+  button {
+    font: inherit; cursor: pointer; border-radius: 6px; padding: 6px 9px;
+    background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1); color: #F5F1EC;
+  }
+  button:hover:not(:disabled) { border-color: var(--fc); color: var(--fc); }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+
+  .work {
+    flex: 1; min-height: 0; overflow: auto; border-radius: 6px; padding: 7px 8px;
+    background: rgba(0,0,0,.34); border: 1px solid rgba(255,255,255,.1);
+  }
+  .work .task-line { color: #F5F1EC; margin-bottom: 5px; }
+  .work .empty { color: rgba(255,255,255,.38); }
+  .step { display: flex; gap: 6px; color: rgba(255,255,255,.5); padding: 1px 0; }
+  .step .g { width: 9px; flex: none; }
+  .step.ok { color: #7FD1A0; }
+  .step.failed { color: #FF5A3D; }
+  .step.running, .step.verifying { color: #FF9264; }
+  .step .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .stop {
+    background: rgba(255,90,61,.16); border-color: rgba(255,90,61,.5); color: #FFB0A0;
+    font-weight: 700; letter-spacing: 3px; padding: 9px;
+  }
+  .stop:hover { background: rgba(255,90,61,.28); border-color: #FF5A3D; color: #fff; }
+  .resume { background: rgba(127,209,160,.14); border-color: rgba(127,209,160,.45); color: #A8E6C0; letter-spacing: 1px; padding: 9px; }
+  .row { display: flex; gap: 6px; }
+  .row button { flex: 1; font-size: 10.5px; padding: 5px; }
+  .hidden { display: none !important; }
+
+  /* An unanswered request auto-denies, so it has to be impossible to miss. */
+  .ask-owner {
+    border: 1px solid #FF9264; border-radius: 6px; padding: 8px;
+    background: rgba(38,20,12,.96);
+  }
+  .ask-owner h4 { margin: 0 0 3px; color: #FF9264; font-size: 10.5px; letter-spacing: 1.5px; }
+  .ask-owner .detail {
+    color: #F5F1EC; font-size: 10.5px; max-height: 46px; overflow: auto;
+    word-break: break-all; margin-bottom: 6px;
+  }
+  .ask-owner .clock { color: #FF9264; font-size: 10px; margin-top: 5px; text-align: center; }
+  .allow { border-color: rgba(127,209,160,.45); color: #A8E6C0; }
+  .deny { border-color: rgba(255,90,61,.5); color: #FFB0A0; }
+
+  #toast {
+    position: fixed; left: 12px; right: 12px; bottom: 10px; z-index: 9;
+    background: rgba(58, 21, 18, .97); border: 1px solid rgba(255,90,61,.5); color: #FFB0A0;
+    border-radius: 6px; padding: 6px 8px; font-size: 10.5px;
+  }
+</style>
+
+<div class="stage">
+  <div class="head" id="head">
+    <div class="antenna"></div>
+    <div class="vent l"></div>
+    <div class="vent r"></div>
+    <div class="screen"><svg id="face" viewBox="0 0 240 160" preserveAspectRatio="xMidYMid meet"></svg></div>
+  </div>
+
+  <div class="status">
+    <b id="state">idle</b>
+    <span id="note"></span>
+  </div>
+
+  <div class="panel">
+    <div class="ask-owner hidden" id="approval">
+      <h4 id="ap-kind">APPROVAL NEEDED</h4>
+      <div class="detail" id="ap-detail"></div>
+      <div class="row">
+        <button class="deny" id="ap-deny">DENY</button>
+        <button class="allow" id="ap-allow">ALLOW</button>
+      </div>
+      <div class="clock" id="ap-clock"></div>
+    </div>
+
+    <div class="ask">
+      <input id="task" placeholder="give Woboo a task…" autocomplete="off" spellcheck="false">
+      <button id="send">▶</button>
+    </div>
+
+    <div class="work" id="work"><div class="empty">No mission yet.</div></div>
+
+    <button class="stop" id="stop">STOP</button>
+    <button class="resume hidden" id="resume">RELEASE STOP</button>
+    <div class="row">
+      <button id="look">LOOK</button>
+      <button id="panel">PANEL</button>
+      <button id="hide">HIDE</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="hidden"></div>
+
+<style id="face-css"></style>
+
+<script>
+  // No imports here on purpose: Chromium blocks ES modules over file://, so the
+  // main process renders the face to SVG markup and this script only draws it.
+  var $ = function (id) { return document.getElementById(id); };
+  var approvals = [];
+  var busy = false;
+  var stopped = false;
+  var pinned = false; // expanded because something needs attention
+  var clockTimer = null;
+  var collapseTimer = null;
+
+  function esc(text) {
+    return String(text == null ? '' : text)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function toast(message) {
+    $('toast').textContent = message;
+    $('toast').classList.remove('hidden');
+    setTimeout(function () { $('toast').classList.add('hidden'); }, 4200);
+  }
+
+  // ── expand / collapse ─────────────────────────────────────────────────────
+  // The window itself resizes, so idle Woboo is a small head and nothing more.
+
+  function expand() {
+    clearTimeout(collapseTimer);
+    if (document.body.classList.contains('expanded')) return;
+    document.body.classList.add('expanded');
+    window.wobo.mode('expanded');
+  }
+
+  function collapse() {
+    // Never shrink out from under a mission, a pending approval, or typing.
+    if (pinned || busy || approvals.length || document.activeElement === $('task')) return;
+    document.body.classList.remove('expanded');
+    window.wobo.mode('compact');
+  }
+
+  // The head is a drag region, and Chromium gives those to the window manager —
+  // no mouse event reaches this document while you are over it. So the main
+  // process watches the OS cursor and tells us. DOM events stay wired up too:
+  // they fire fine over the panel, which is no-drag, and cost nothing.
+  window.wobo.onHover(function (inside) {
+    clearTimeout(collapseTimer);
+    if (inside) expand();
+    else collapseTimer = setTimeout(collapse, 500);
+  });
+  document.addEventListener('mousemove', expand);
+  document.body.addEventListener('mouseleave', function () {
+    clearTimeout(collapseTimer);
+    collapseTimer = setTimeout(collapse, 600);
+  });
+
+  // ── face ──────────────────────────────────────────────────────────────────
+
+  function drawFace(painted) {
+    if (!painted) return;
+    $('face').innerHTML = painted.svg;
+    document.documentElement.style.setProperty('--fc', painted.color);
+    $('state').textContent = painted.state;
+    $('note').textContent = painted.note || '';
+  }
+
+  // ── mission ───────────────────────────────────────────────────────────────
+
+  var GLYPH = { pending: '·', running: '>', verifying: '?', ok: '+', failed: 'x' };
+
+  function drawMission(mission) {
+    var host = $('work');
+    if (!mission) {
+      host.innerHTML = '<div class="empty">No mission yet.</div>';
+      return;
+    }
+    var html = '<div class="task-line">' + esc(mission.task) + '</div>';
+    (mission.steps || []).forEach(function (step, i) {
+      html += '<div class="step ' + esc(step.status) + '">' +
+        '<span class="g">' + (GLYPH[step.status] || '·') + '</span>' +
+        '<span class="t">' + (i + 1) + '. ' + esc(step.title) + '</span></div>';
+    });
+    if (mission.report) {
+      html += '<div class="step" style="margin-top:5px">' + esc(mission.report) + '</div>';
+    }
+    host.innerHTML = html;
+    host.scrollTop = host.scrollHeight;
+  }
+
+  function setBusy(next) {
+    busy = next;
+    $('send').disabled = busy || stopped;
+    $('task').disabled = busy || stopped;
+  }
+
+  function setStopped(next, reason) {
+    stopped = next;
+    $('stop').classList.toggle('hidden', stopped);
+    $('resume').classList.toggle('hidden', !stopped);
+    $('send').disabled = busy || stopped;
+    $('task').disabled = busy || stopped;
+    if (stopped && reason) $('note').textContent = reason;
+  }
+
+  // ── approvals ─────────────────────────────────────────────────────────────
+
+  function drawApprovals() {
+    var request = approvals[0];
+    var card = $('approval');
+    if (!request) {
+      card.classList.add('hidden');
+      if (clockTimer) { clearInterval(clockTimer); clockTimer = null; }
+      pinned = false;
+      return;
+    }
+    pinned = true;
+    expand();
+    card.classList.remove('hidden');
+    $('ap-kind').textContent = String(request.kind || 'approval').toUpperCase() + '?';
+    $('ap-detail').textContent = request.detail || '';
+
+    var tick = function () {
+      var left = Math.max(0, Math.round((request.asked + request.timeout * 1000 - Date.now()) / 1000));
+      $('ap-clock').textContent = 'auto-denies in ' + left + 's' +
+        (approvals.length > 1 ? ' · ' + (approvals.length - 1) + ' more' : '');
+    };
+    if (clockTimer) clearInterval(clockTimer);
+    clockTimer = setInterval(tick, 500);
+    tick();
+  }
+
+  function answer(decision) {
+    var request = approvals[0];
+    if (!request) return;
+    window.wobo.approve(request.id, decision);
+    approvals = approvals.filter(function (r) { return r.id !== request.id; });
+    drawApprovals();
+  }
+
+  // ── wiring ────────────────────────────────────────────────────────────────
+
+  window.wobo.onFace(drawFace);
+  window.wobo.onToast(toast);
+
+  window.wobo.onEvent(function (event) {
+    if (event.type === 'mission') {
+      drawMission(event.mission);
+      var state = event.mission && event.mission.state;
+      setBusy(state === 'running' || state === 'planning');
+      if (busy) expand();
+      return;
+    }
+    if (event.type === 'approval') {
+      approvals.push(event.request);
+      drawApprovals();
+      return;
+    }
+    if (event.type === 'approval:resolved') {
+      approvals = approvals.filter(function (r) { return r.id !== event.id; });
+      drawApprovals();
+      return;
+    }
+    if (event.type === 'guard') {
+      setStopped(event.stopped, event.reason);
+    }
+  });
+
+  function submit() {
+    var text = $('task').value.trim();
+    if (!text) return;
+    $('task').value = '';
+    window.wobo.task(text);
+  }
+
+  $('send').onclick = submit;
+  $('task').onkeydown = function (e) { if (e.key === 'Enter') submit(); };
+  $('task').onblur = function () { collapseTimer = setTimeout(collapse, 900); };
+  $('stop').onclick = function () { window.wobo.stop(); };
+  $('resume').onclick = function () { window.wobo.resume(); };
+  $('look').onclick = function () { window.wobo.look(); };
+  $('panel').onclick = function () { window.wobo.panel(); };
+  $('hide').onclick = function () { window.wobo.hide(); };
+  $('ap-allow').onclick = function () { answer('allow'); };
+  $('ap-deny').onclick = function () { answer('deny'); };
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') { if (approvals.length) answer('deny'); else collapse(); }
+  });
+
+  // Cold start: ask the body what it is doing and draw that.
+  window.wobo.snapshot().then(function (snap) {
+    $('face-css').textContent = snap.css;
+    $('face').setAttribute('viewBox', snap.viewBox);
+    drawFace(snap.face);
+    drawMission(snap.mission);
+    setBusy(!!snap.busy);
+    setStopped(!!(snap.guard && snap.guard.stopped), snap.guard && snap.guard.reason);
+    approvals = snap.approvals || [];
+    drawApprovals();
+  });
+</script>

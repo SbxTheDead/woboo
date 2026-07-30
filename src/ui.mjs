@@ -1,0 +1,585 @@
+// The dashboard. One self-contained page — no build step, no dependencies, no
+// network fetches — because a tool that operates your machine should not need a
+// toolchain to show you what it is doing.
+//
+// The face is the point. Every expression maps to a real state in face.mjs, so
+// the drawing is a rendering of the state machine rather than decoration: if
+// Woboo is squinting, a verify command is genuinely running right now.
+
+import { FACES, faceSvg, faceColor, FACE_CSS, VIEWBOX } from './faceart.mjs';
+
+// The ten faces, rendered once here and embedded as markup. Same trick the
+// desktop widget uses: the geometry lives in exactly one module, and the client
+// only ever looks up and draws. Nothing to keep in sync, nothing to drift.
+const ART = JSON.stringify(
+  Object.fromEntries(Object.keys(FACES).map((state) => [state, { svg: faceSvg(state), color: faceColor(state) }])),
+);
+
+export function page({ key }) {
+  return `<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="wobo-key" content="${key}">
+<title>Woboo</title>
+<style>
+  :root {
+    --bg: #08080B;
+    --panel: #0C0C11;
+    --line: rgba(255,255,255,.09);
+    --ink: #FFFFFF;
+    --dim: rgba(255,255,255,.56);
+    --fc: #FFB55C;
+    --warn: #FF9264;
+    --bad: #FF5A3D;
+    --ok: #7FD1A0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 13px/1.5 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    height: 100vh; overflow: hidden;
+  }
+  .shell { display: flex; flex-direction: column; height: 100vh; }
+
+  header {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 0 152px 0 14px; min-height: 38px;
+    border-bottom: 1px solid var(--line);
+    background: linear-gradient(180deg, #12100F 0%, var(--panel) 100%);
+    /* In the desktop console the native title bar is hidden and this header
+       stands in for it. A plain browser ignores the rule. */
+    -webkit-app-region: drag;
+  }
+  header button, header .tag, header input { -webkit-app-region: no-drag; }
+
+  /* The mark: the same face the widget and the tray wear, at header size. */
+  .mark {
+    width: 26px; height: 21px; flex: none; border-radius: 6px; position: relative;
+    background: linear-gradient(158deg, #1A1512 0%, #0D0A09 70%);
+    box-shadow: inset 0 0 0 1px var(--fc), 0 0 12px -4px var(--fc);
+    transition: box-shadow .5s ease;
+  }
+  .mark i {
+    position: absolute; top: 6px; left: 6px; width: 4px; height: 8px;
+    border-radius: 2px; background: var(--fc); box-shadow: 0 0 6px -1px var(--fc);
+  }
+  .mark i::after {
+    content: ''; position: absolute; left: 10px; top: 0; width: 4px; height: 8px;
+    border-radius: 2px; background: var(--fc);
+  }
+  .mark b {
+    position: absolute; left: 8px; bottom: 4px; width: 10px; height: 2px;
+    border-radius: 2px; background: var(--fc);
+  }
+
+  .brand {
+    font-weight: 700; letter-spacing: 5px; text-indent: 5px;
+    color: #FFFFFF; font-size: 13px;
+  }
+  .tag {
+    font-size: 11px; color: var(--dim); border: 1px solid var(--line);
+    padding: 2px 7px; border-radius: 3px; white-space: nowrap;
+  }
+  .tag b { color: var(--ink); font-weight: 500; }
+  .spacer { flex: 1; }
+  .live { color: var(--ok); }
+  .dead { color: var(--bad); }
+
+  main { flex: 1; display: grid; grid-template-columns: 300px 1fr; min-height: 0; }
+  @media (max-width: 820px) { main { grid-template-columns: 1fr; } }
+
+  .col-face {
+    border-right: 1px solid var(--line); padding: 14px;
+    display: flex; flex-direction: column; gap: 10px; overflow: auto;
+  }
+  /* The same chassis the desktop companion wears, so the console and the widget
+     are recognisably one character rather than two skins. */
+  .crt {
+    position: relative; padding: 13px; border-radius: 30px;
+    background: linear-gradient(158deg, #1A1512 0%, #0D0A09 62%, #08080B 100%);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, .06),
+      0 0 0 1px rgba(0, 0, 0, .6),
+      0 14px 34px rgba(0, 0, 0, .5),
+      0 0 40px -12px var(--fc);
+    transition: box-shadow .5s ease;
+  }
+  .crt::before {
+    content: ''; position: absolute; inset: 0; border-radius: 30px; pointer-events: none;
+    border: 1px solid var(--fc); opacity: .45; transition: border-color .5s ease;
+  }
+  .antenna {
+    position: absolute; top: -9px; left: 50%; transform: translateX(-50%);
+    width: 3px; height: 9px; border-radius: 2px;
+    background: linear-gradient(#E4D8C8, rgba(0,0,0,.2));
+  }
+  .antenna::after {
+    content: ''; position: absolute; top: -5px; left: 50%; transform: translateX(-50%);
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--fc); box-shadow: 0 0 9px var(--fc);
+    animation: breathe 3.2s ease-in-out infinite;
+  }
+  @keyframes breathe { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+
+  .glass {
+    position: relative; border-radius: 20px; overflow: hidden;
+    background: radial-gradient(115% 90% at 50% 0%, #241C18 0%, #080505 100%);
+  }
+  /* Scanlines, so the face reads as a screen on a machine rather than a logo. */
+  .glass::after {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: repeating-linear-gradient(to bottom, rgba(255,255,255,.035) 0 1px, transparent 1px 3px);
+  }
+  .vent {
+    position: absolute; top: 42%; width: 3px; height: 26px;
+    border-radius: 2px; background: #2A211C;
+  }
+  .vent.l { left: 4px; }
+  .vent.r { right: 4px; }
+  #face { display: block; width: 100%; height: auto; }
+${FACE_CSS}
+  .state-line { text-align: center; }
+  .state-line b { color: var(--fc); text-transform: uppercase; letter-spacing: 2px; }
+  .state-line span { display: block; color: var(--dim); font-size: 11px; min-height: 16px; }
+
+  button {
+    font: inherit; cursor: pointer; border-radius: 4px; border: 1px solid var(--line);
+    background: rgba(255,255,255,.06); color: var(--ink); padding: 7px 10px;
+  }
+  button:hover:not(:disabled) { border-color: var(--fc); color: var(--fc); }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  .stop {
+    background: rgba(255,90,61,.16); border-color: rgba(255,90,61,.5); color: #FFB0A0;
+    font-weight: 700; letter-spacing: 3px; padding: 13px;
+  }
+  .stop:hover:not(:disabled) { background: rgba(255,90,61,.28); border-color: var(--bad); color: #fff; }
+  .resume { background: rgba(127,209,160,.14); border-color: rgba(127,209,160,.45); color: #A8E6C0; letter-spacing: 1px; padding: 11px; }
+  .mini { display: flex; gap: 8px; }
+  .mini button { flex: 1; font-size: 11px; }
+  .hidden { display: none !important; }
+
+  #shot-wrap { border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  #shot { display: block; width: 100%; }
+
+  .col-work { display: grid; grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); min-height: 0; }
+  .panel { display: flex; flex-direction: column; min-height: 0; padding: 12px 14px; }
+  .panel + .panel { border-top: 1px solid var(--line); }
+  .panel h2 {
+    margin: 0 0 8px; font-size: 11px; letter-spacing: 3px; color: var(--dim); font-weight: 500;
+  }
+  .panel > div { overflow: auto; min-height: 0; flex: 1; }
+
+  .summary { color: var(--dim); margin-bottom: 10px; }
+  .summary b { color: var(--ink); font-weight: 500; }
+  .badge { font-size: 10px; border: 1px solid var(--line); padding: 1px 5px; border-radius: 3px; margin-left: 6px; }
+
+  .step { border-left: 2px solid var(--line); padding: 5px 0 5px 10px; margin-bottom: 4px; }
+  .step-head { display: flex; gap: 8px; align-items: baseline; }
+  .step-title { flex: 1; }
+  .step-meta { color: var(--dim); font-size: 11px; white-space: nowrap; }
+  .step.ok { border-left-color: var(--ok); }
+  .step.failed { border-left-color: var(--bad); }
+  .step.running, .step.verifying { border-left-color: var(--warn); }
+  .glyph { width: 12px; text-align: center; }
+  .step.ok .glyph { color: var(--ok); }
+  .step.failed .glyph { color: var(--bad); }
+  .step.running .glyph, .step.verifying .glyph { color: var(--warn); }
+  .step.pending { opacity: .5; }
+  .kind { color: var(--dim); font-size: 10px; text-transform: uppercase; }
+  details { margin-top: 5px; }
+  summary { color: var(--dim); font-size: 11px; cursor: pointer; }
+  pre {
+    margin: 5px 0 0; padding: 7px; background: rgba(0,0,0,.36); border: 1px solid var(--line);
+    border-radius: 4px; max-height: 200px; overflow: auto; white-space: pre-wrap;
+    word-break: break-word; font-size: 11px; color: var(--dim);
+  }
+  .empty { color: var(--dim); }
+
+  .line { display: flex; gap: 8px; white-space: pre-wrap; word-break: break-word; }
+  .line time { color: rgba(255,255,255,.32); flex: none; }
+  .line .kind-col { color: var(--dim); flex: none; width: 68px; }
+  .line.ok .msg { color: var(--ok); }
+  .line.warn .msg { color: var(--warn); }
+  .line.error .msg { color: var(--bad); }
+
+  footer {
+    display: flex; gap: 8px; align-items: center; padding: 10px 14px;
+    border-top: 1px solid var(--line); background: var(--panel);
+  }
+  .prompt { color: var(--fc); }
+  #task {
+    flex: 1; font: inherit; background: rgba(0,0,0,.36); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 4px; padding: 8px 10px;
+  }
+  #task:focus { outline: none; border-color: var(--fc); }
+
+  .modal {
+    position: fixed; inset: 0; background: rgba(4,7,6,.82);
+    display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 20;
+  }
+  .card {
+    background: var(--panel); border: 1px solid var(--warn); border-radius: 8px;
+    padding: 18px; max-width: 560px; width: 100%;
+  }
+  .card h3 { margin: 0 0 4px; color: var(--warn); font-size: 13px; letter-spacing: 2px; }
+  .card .why { color: var(--dim); font-size: 11px; margin-bottom: 10px; }
+  .card .row { display: flex; gap: 10px; margin-top: 14px; }
+  .card .row button { flex: 1; padding: 10px; }
+  .allow { border-color: rgba(127,209,160,.45); color: #A8E6C0; }
+  .deny { border-color: rgba(255,90,61,.5); color: #FFB0A0; }
+  .toast {
+    position: fixed; bottom: 66px; left: 50%; transform: translateX(-50%);
+    background: var(--panel); border: 1px solid var(--bad); color: #FFB0A0;
+    padding: 8px 14px; border-radius: 4px; z-index: 30; max-width: 80vw;
+  }
+</style>
+
+<div class="shell">
+  <header>
+    <span class="mark" aria-hidden="true"><i></i><b></b></span>
+    <span class="brand">WOBOO</span>
+    <span class="tag" id="tag-brain">brain <b>…</b></span>
+    <span class="tag" id="tag-crew">crew <b>…</b></span>
+    <span class="tag" id="tag-hands">hands <b>…</b></span>
+    <span class="tag" id="tag-ws">workspace <b>…</b></span>
+    <span class="spacer"></span>
+    <span class="tag" id="tag-link">connecting…</span>
+  </header>
+
+  <main>
+    <section class="col-face">
+      <div class="crt" id="crt" data-face="idle">
+        <div class="antenna"></div>
+        <div class="vent l"></div>
+        <div class="vent r"></div>
+        <div class="glass"><svg id="face" viewBox="${VIEWBOX}" role="img" aria-label="Woboo's face"></svg></div>
+      </div>
+      <div class="state-line">
+        <b id="face-state">idle</b>
+        <span id="face-note"></span>
+      </div>
+      <button class="stop" id="btn-stop">STOP</button>
+      <button class="resume hidden" id="btn-resume">RELEASE STOP</button>
+      <div class="mini">
+        <button id="btn-look">LOOK</button>
+        <button id="btn-selftest">SELF-TEST</button>
+      </div>
+      <div class="hidden" id="shot-wrap">
+        <img id="shot" alt="the screen as Woboo last saw it">
+      </div>
+    </section>
+
+    <section class="col-work">
+      <div class="panel">
+        <h2>MISSION</h2>
+        <div id="mission"><p class="empty">No mission yet. Type a task below.</p></div>
+      </div>
+      <div class="panel">
+        <h2>JOURNAL</h2>
+        <div id="log"></div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span class="prompt">&gt;</span>
+    <input id="task" placeholder="give Woboo a task…" autocomplete="off" spellcheck="false">
+    <button id="btn-send">SEND</button>
+  </footer>
+</div>
+
+<div class="modal hidden" id="modal">
+  <div class="card">
+    <h3 id="ap-kind">APPROVAL NEEDED</h3>
+    <div class="why" id="ap-why"></div>
+    <pre id="ap-detail"></pre>
+    <div class="row">
+      <button class="deny" id="ap-deny">DENY</button>
+      <button class="allow" id="ap-allow">ALLOW</button>
+    </div>
+    <div class="why" id="ap-clock"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var KEY = document.querySelector('meta[name=wobo-key]').content;
+  var $ = function (id) { return document.getElementById(id); };
+  var state = null;
+  var approvals = [];
+
+  function esc(text) {
+    return String(text == null ? '' : text)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function api(path, body) {
+    return fetch(path + (path.indexOf('?') < 0 ? '?' : '&') + 'key=' + encodeURIComponent(KEY), {
+      method: body === undefined ? 'GET' : 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body)
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (data) {
+        if (!res.ok) throw new Error(data.error || ('request failed (' + res.status + ')'));
+        return data;
+      });
+    });
+  }
+
+  function toast(message) {
+    var el = document.createElement('div');
+    el.className = 'toast';
+    el.textContent = message;
+    document.body.appendChild(el);
+    setTimeout(function () { el.remove(); }, 5000);
+  }
+
+  // ── the face ───────────────────────────────────────────────────────────────
+  // Pre-rendered server-side from src/faceart.mjs — the same module the desktop
+  // widget draws from, so the panel and the companion can never drift into being
+  // two different characters.
+
+  var ART = ${ART};
+
+  function drawFace(current) {
+    var name = current && ART[current.state] ? current.state : 'idle';
+    var art = ART[name];
+    $('face').innerHTML = art.svg;
+    document.documentElement.style.setProperty('--fc', art.color);
+    $('crt').setAttribute('data-face', name);
+    $('face-state').textContent = name;
+    $('face-note').textContent = (current && current.note) || '';
+  }
+
+  // ── mission ────────────────────────────────────────────────────────────────
+
+  var GLYPH = { pending: '·', running: '>', verifying: '?', ok: '+', failed: 'x' };
+
+  function drawMission(mission) {
+    var host = $('mission');
+    if (!mission) {
+      host.innerHTML = '<p class="empty">No mission yet. Type a task below.</p>';
+      return;
+    }
+
+    var html = '<div class="summary"><b>' + esc(mission.task) + '</b>';
+    if (mission.offline) html += '<span class="badge">offline plan</span>';
+    if (mission.crew) html += '<span class="badge">' + esc(mission.crew) + '</span>';
+    html += '<span class="badge">' + esc(mission.state) + '</span>';
+    if (mission.summary) html += '<div>' + esc(mission.summary) + '</div>';
+    html += '</div>';
+
+    (mission.steps || []).forEach(function (step, i) {
+      var seconds = step.ms ? (step.ms / 1000).toFixed(1) + 's' : '';
+      html += '<div class="step ' + esc(step.status) + '">' +
+        '<div class="step-head">' +
+          '<span class="glyph">' + (GLYPH[step.status] || '·') + '</span>' +
+          '<span class="step-title">' + (i + 1) + '. ' + esc(step.title) +
+            ' <span class="kind">' + esc(step.kind) + '</span></span>' +
+          '<span class="step-meta">' + (step.attempts > 1 ? 'try ' + step.attempts + ' · ' : '') + seconds + '</span>' +
+        '</div>';
+
+      if (step.verify) {
+        html += '<div class="step-meta">check: ' + esc(step.verify) + '</div>';
+      }
+      if (step.diagnosis) {
+        html += '<div class="step-meta">diagnosis: ' + esc(step.diagnosis) + '</div>';
+      }
+      if (step.output) {
+        html += '<details><summary>output</summary><pre>' + esc(step.output) + '</pre></details>';
+      }
+      if (step.verifyOutput) {
+        html += '<details><summary>check output</summary><pre>' + esc(step.verifyOutput) + '</pre></details>';
+      }
+      html += '</div>';
+    });
+
+    if (mission.report) {
+      html += '<div class="summary" style="margin-top:10px">' + esc(mission.report) + '</div>';
+    }
+    host.innerHTML = html;
+  }
+
+  // ── journal ────────────────────────────────────────────────────────────────
+
+  function clock(stamp) {
+    var when = stamp ? new Date(stamp) : new Date();
+    return when.toTimeString().slice(0, 8);
+  }
+
+  function addLine(entry) {
+    var host = $('log');
+    var pinned = host.scrollTop + host.clientHeight >= host.scrollHeight - 24;
+    var el = document.createElement('div');
+    el.className = 'line ' + (entry.level || 'info');
+    el.innerHTML = '<time>' + clock(entry.t || entry.at) + '</time>' +
+      '<span class="kind-col">' + esc(entry.kind) + '</span>' +
+      '<span class="msg">' + esc(entry.msg) + '</span>';
+    host.appendChild(el);
+    while (host.childElementCount > 400) host.removeChild(host.firstElementChild);
+    if (pinned) host.scrollTop = host.scrollHeight;
+  }
+
+  // ── approvals ──────────────────────────────────────────────────────────────
+
+  var clockTimer = null;
+
+  function drawApprovals() {
+    var request = approvals[0];
+    if (!request) {
+      $('modal').classList.add('hidden');
+      if (clockTimer) { clearInterval(clockTimer); clockTimer = null; }
+      return;
+    }
+    $('ap-kind').textContent = String(request.kind || 'approval').toUpperCase() + ' — ALLOW?';
+    $('ap-why').textContent = request.reason || '';
+    $('ap-detail').textContent = request.detail || '';
+    $('modal').classList.remove('hidden');
+
+    var tick = function () {
+      var left = Math.max(0, Math.round((request.asked + request.timeout * 1000 - Date.now()) / 1000));
+      $('ap-clock').textContent = 'auto-denies in ' + left + 's' +
+        (approvals.length > 1 ? ' · ' + (approvals.length - 1) + ' more waiting' : '');
+      if (left === 0) resolve(request.id, 'deny', true);
+    };
+    if (clockTimer) clearInterval(clockTimer);
+    clockTimer = setInterval(tick, 500);
+    tick();
+  }
+
+  function resolve(id, decision, silent) {
+    approvals = approvals.filter(function (r) { return r.id !== id; });
+    drawApprovals();
+    if (silent) return;
+    api('/api/approval', { id: id, decision: decision }).catch(function (err) { toast(err.message); });
+  }
+
+  // ── wiring ─────────────────────────────────────────────────────────────────
+
+  function drawHeader(snap) {
+    var brain = snap.brain || {};
+    $('tag-brain').innerHTML = 'brain <b>' +
+      (brain.credentials ? esc(brain.model) + ' / ' + esc(brain.effort) : 'offline') + '</b>';
+
+    var ready = (snap.crew || []).filter(function (m) { return m.available; });
+    $('tag-crew').innerHTML = 'crew <b>' +
+      (ready.length ? ready.map(function (m) { return esc(m.label); }).join(', ') : 'none found') + '</b>';
+
+    $('tag-hands').innerHTML = 'hands <b>' + esc(snap.hands) + '</b>';
+    $('tag-ws').innerHTML = 'workspace <b>' + esc((snap.settings && snap.settings.workspace) || 'cwd') + '</b>';
+
+    var stopped = snap.guard && snap.guard.stopped;
+    $('btn-stop').classList.toggle('hidden', !!stopped);
+    $('btn-resume').classList.toggle('hidden', !stopped);
+    $('btn-send').disabled = !!stopped || !!snap.busy;
+    $('btn-selftest').disabled = !!stopped || !!snap.busy;
+  }
+
+  function drawAll(snap) {
+    state = snap;
+    drawHeader(snap);
+    drawFace(snap.face);
+    drawMission(snap.mission);
+    $('log').innerHTML = '';
+    (snap.log || []).forEach(addLine);
+    $('log').scrollTop = $('log').scrollHeight;
+    approvals = snap.approvals || [];
+    drawApprovals();
+    if (snap.shot) showShot();
+  }
+
+  function showShot() {
+    $('shot-wrap').classList.remove('hidden');
+    $('shot').src = '/api/shot?key=' + encodeURIComponent(KEY) + '&t=' + Date.now();
+  }
+
+  function handle(event) {
+    switch (event.type) {
+      case 'state':
+        drawAll(event.state);
+        return;
+      case 'face':
+        drawFace({ state: event.state, note: event.note });
+        return;
+      case 'mission':
+        drawMission(event.mission);
+        if (state) {
+          state.busy = !!(event.mission && (event.mission.state === 'running' || event.mission.state === 'planning'));
+          drawHeader(state);
+        }
+        return;
+      case 'log':
+        addLine(event);
+        return;
+      case 'approval':
+        approvals.push(event.request);
+        drawApprovals();
+        return;
+      case 'approval:resolved':
+        resolve(event.id, event.decision, true);
+        return;
+      case 'guard':
+        if (state) {
+          state.guard = { stopped: event.stopped, reason: event.reason };
+          drawHeader(state);
+        }
+        return;
+      case 'shot':
+        showShot();
+        return;
+      default:
+        // crew / crew:output and anything added later: the journal already
+        // carries the human-readable version, so there is nothing to do here.
+    }
+  }
+
+  function connect() {
+    var source = new EventSource('/api/events?key=' + encodeURIComponent(KEY));
+    source.onopen = function () {
+      $('tag-link').textContent = '● live';
+      $('tag-link').className = 'tag live';
+    };
+    source.onmessage = function (message) {
+      try { handle(JSON.parse(message.data)); } catch (err) { /* malformed frame */ }
+    };
+    source.onerror = function () {
+      $('tag-link').textContent = '● reconnecting';
+      $('tag-link').className = 'tag dead';
+      // EventSource retries on its own; this only reports the gap.
+    };
+  }
+
+  function submit() {
+    var input = $('task');
+    var task = input.value.trim();
+    if (!task) return;
+    input.value = '';
+    api('/api/mission', { task: task }).catch(function (err) {
+      toast(err.message);
+      input.value = task;
+    });
+  }
+
+  $('btn-send').onclick = submit;
+  $('task').onkeydown = function (event) { if (event.key === 'Enter') submit(); };
+  $('btn-stop').onclick = function () { api('/api/stop', {}).catch(function (e) { toast(e.message); }); };
+  $('btn-resume').onclick = function () { api('/api/resume', {}).catch(function (e) { toast(e.message); }); };
+  $('btn-selftest').onclick = function () { api('/api/selftest', {}).catch(function (e) { toast(e.message); }); };
+  $('btn-look').onclick = function () {
+    api('/api/look', {}).then(function (result) {
+      if (result.ok) showShot(); else toast(result.error || 'screen capture unavailable');
+    }).catch(function (e) { toast(e.message); });
+  };
+  $('ap-allow').onclick = function () { if (approvals[0]) resolve(approvals[0].id, 'allow'); };
+  $('ap-deny').onclick = function () { if (approvals[0]) resolve(approvals[0].id, 'deny'); };
+
+  // Space is a habit for "stop"; Escape denies whatever is being asked.
+  document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape' && approvals[0]) resolve(approvals[0].id, 'deny');
+  });
+
+  drawFace({ state: 'idle', note: '' });
+  connect();
+})();
+</script>
+`;
+}
