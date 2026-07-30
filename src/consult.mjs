@@ -61,8 +61,22 @@ export function forget(key) {
 
 const open = new Map();
 
+// The open questions themselves, so a channel can find one by id and answer it.
+// (This mapped the wrong field once and returned an array of undefined, which
+// made every Telegram tap fail with "cannot read properties of undefined".)
 export function pending() {
-  return [...open.values()].map(({ question }) => question);
+  return [...open.values()].map(({ request }) => request);
+}
+
+// Answer by id without needing to look the request up first — the channel knows
+// which option was tapped, and finding it is this module's job, not theirs.
+export function choose(id, index) {
+  const waiting = open.get(id);
+  if (!waiting) return null;
+  const option = waiting.request.options[Number(index)];
+  if (!option) return null;
+  waiting.settle(option.value, 'answered');
+  return option;
 }
 
 // Ask the owner. Resolves with the chosen value, or null if nobody answered.

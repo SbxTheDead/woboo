@@ -285,14 +285,12 @@ export async function start({ token, onPairCode } = {}) {
     // A consultation carries three parts, an approval two.
     if (parts[0] === 'c') {
       const [, id, index] = parts;
-      const request = consult.pending().find((r) => r.id === id);
-      const chosen = request?.options?.[Number(index)];
-      const took = chosen ? consult.answer(id, chosen.value) : false;
+      const chosen = consult.choose(id, index);
       await bot.call('answerCallbackQuery', {
         callback_query_id: query.id,
-        text: took ? `Chose ${chosen.label}`.slice(0, 60) : 'too late — that question expired',
+        text: chosen ? `Chose ${chosen.label}`.slice(0, 60) : 'too late — that question expired',
       });
-      if (took) {
+      if (chosen) {
         await bot
           .call('editMessageReplyMarkup', {
             chat_id: chatId,
