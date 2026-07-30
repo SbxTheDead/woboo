@@ -159,6 +159,44 @@ async function ask({ system, prompt, schema, name, maxTokens = 8000, think = tru
   return { data, usage: payload.usage, model: payload.model };
 }
 
+// Long-form prose rather than a schema — the scribe wants a document back, not
+// a validated object. Thinking stays off: this is writing, not reasoning, and a
+// reasoning budget on top of 16k of output is a slow way to get the same words.
+export async function write({ system, prompt, maxTokens = 16_000 }) {
+  const key = apiKey();
+  if (!key) throw new Error('no NVIDIA key — run `woboo secret nvidia nvapi-...`');
+
+  const post = () =>
+    fetch(`${BASE}/chat/completions`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model: model(),
+        max_tokens: maxTokens,
+        temperature: 0.6,
+        top_p: 0.95,
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: prompt },
+        ],
+      }),
+    });
+
+  let response = await post();
+  for (let attempt = 1; attempt <= 4 && (response.status === 503 || response.status === 429); attempt += 1) {
+    const wait = attempt * 4000;
+    record('brain', `NIM busy (${response.status}); retrying in ${wait / 1000}s`, { level: 'warn' });
+    await new Promise((resolve) => setTimeout(resolve, wait));
+    response = await post();
+  }
+  if (!response.ok) {
+    throw new Error(`NIM ${response.status}: ${(await response.text()).slice(0, 200)}`);
+  }
+
+  const payload = await response.json();
+  return payload.choices?.[0]?.message?.content || '';
+}
+
 // ── the two calls the foreman makes ───────────────────────────────────────────
 // Same shapes brain.mjs produces, so the foreman cannot tell which brain it got.
 

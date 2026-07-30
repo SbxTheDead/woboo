@@ -17,6 +17,8 @@ import * as crew from './crew.mjs';
 import * as eyes from './eyes.mjs';
 import * as pilot from './pilot.mjs';
 import * as memory from './memory.mjs';
+import * as scribe from './scribe.mjs';
+import path from 'node:path';
 import { run } from './shell.mjs';
 
 let mission = null;
@@ -222,6 +224,22 @@ async function runStep(i, { cwd, member, task }) {
         setStep(i, { status: 'failed', output: work.out, ms: Date.now() - started });
         return false;
       }
+    } else if (step.kind === 'compose') {
+      // The step that turns gathered material into something worth reading.
+      // Sources come from whatever paths the instruction names; failing that,
+      // whatever the earlier steps left in the workspace.
+      const named = String(instruction).match(/(?:^|[\s:'"(])([.\w][-\w./\\]*\.(?:html?|txt|md|json))\b/gi) || [];
+      const folders = String(instruction).match(/(?:^|[\s:'"(])(\.?[\w][-\w./\\]*\/)(?=[\s,'")]|$)/g) || [];
+      const patterns = [...named, ...folders].map((s) => s.trim().replace(/^['"(:]+/, ''));
+      const sources = scribe.gather(cwd, patterns.length ? patterns : ['.']);
+
+      const out = String(instruction).match(/([-\w./\\]+\.html?)\b/i)?.[1];
+      work = await scribe.compose({
+        instruction,
+        sources,
+        outFile: path.resolve(cwd, out && !sources.some((s) => s.file.endsWith(out)) ? out : 'report.html'),
+        write: brain.write,
+      });
     } else if (step.kind === 'inspect') {
       const shot = await eyes.screenshot({ reason: step.title });
       work = { ok: shot.ok, out: shot.ok ? `screen captured (${shot.size || 'ok'})` : shot.error };

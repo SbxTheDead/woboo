@@ -32,9 +32,10 @@ const PLAN_SCHEMA = {
           title: { type: 'string', description: 'Short imperative label, under 60 chars.' },
           kind: {
             type: 'string',
-            enum: ['delegate', 'shell', 'computer', 'inspect'],
+            enum: ['delegate', 'shell', 'compose', 'computer', 'inspect'],
             description:
               'delegate = hand a spec to the installed coding tool; shell = run a command directly; ' +
+              'compose = read gathered sources and WRITE a document from them; ' +
               'computer = drive the mouse and keyboard on screen like a person; inspect = look at the screen.',
           },
           instruction: {
@@ -92,6 +93,18 @@ reporting back. Plan for that shape:
   Commands that already exit properly on failure — npm test, git, tsc — need no
   wrapping.
 - Use "shell" steps for setup and checks, never for tasks a coding tool should do.
+- When the owner asks for research, a report, a summary or a write-up, the
+  deliverable is WRITING, not a copy of what you found. Downloading a page and
+  printing it to PDF is not research and is never an acceptable answer. Plan it
+  as: gather several sources -> ONE "compose" step that reads them and writes the
+  document -> render that document if a PDF was asked for.
+  A "compose" instruction says what to write and which files to read, like:
+    "Write a researched report on African and Asian elephants from the sources in
+     ./research. Cover biology, social structure, range and conservation status.
+     Sources: ./research"
+  Name the folder or files to read; compose reads .html, .txt, .md and .json and
+  strips the markup itself. Its "verify" should check the written file exists and
+  is a sensible size.
 - Use "computer" steps for work that only exists on screen: browsing the web,
   clicking through a GUI, reading a desktop app's interface. Woboo will look at the
   screen and drive the mouse and keyboard itself. State the goal, not the clicks —
@@ -288,6 +301,23 @@ Produce the plan.`;
     usage: usage && { in: usage.input_tokens, out: usage.output_tokens },
   });
   return data;
+}
+
+// Prose out, not JSON. Used by the scribe to actually write a document.
+export async function write({ system, prompt, maxTokens = 16_000 }) {
+  if (provider() === 'nim') return nim.write({ system, prompt, maxTokens });
+
+  const anthropic = await getClient();
+  const response = await anthropic.messages.create({
+    model: loadSettings().model,
+    max_tokens: maxTokens,
+    system,
+    thinking: { type: 'adaptive' },
+    output_config: { effort: loadSettings().effort },
+    messages: [{ role: 'user', content: prompt }],
+  });
+  if (response.stop_reason === 'refusal') throw new Error('the brain declined to write this');
+  return textOf(response);
 }
 
 export async function repair({ task, step, failure, attempt }) {
