@@ -220,6 +220,60 @@ async function cmdDrive(goal, flags) {
   }
 }
 
+// The browser Woboo drives, and which profile it uses.
+async function cmdBrowser(args, flags) {
+  const browser = await import('./src/browser.mjs');
+  const { browserPath } = await import('./src/toolbox.mjs');
+  const { script } = await import('./src/ps.mjs');
+
+  if (args[0] === 'mine' || args[0] === 'own') {
+    const next = saveSettings({ browserProfile: args[0] });
+    say(green(`  browser profile = ${next.browserProfile}`));
+    say(
+      dim(
+        next.browserProfile === 'mine'
+          ? '  Woboo will act as you: your logins, your sessions, your history.'
+          : '  Woboo gets its own blank profile — safe, but signed in to nothing.',
+      ),
+    );
+    return 0;
+  }
+
+  const exe = browserPath();
+  const which = exe && /chrome\.exe$/i.test(exe) ? 'Chrome' : 'Edge';
+
+  if (flags.restart) {
+    // Chrome allows one process per profile, so the only way to reach the
+    // owner's logged-in profile is to close it and reopen it with the port.
+    // Tabs restore, which is why this is offered rather than merely refused.
+    say(yellow(`  closing ${which} and reopening it with debugging enabled…`));
+    say(dim('  your tabs will restore.'));
+    await script(
+      `Stop-Process -Name '${which === 'Chrome' ? 'chrome' : 'msedge'}' -Force -ErrorAction SilentlyContinue`,
+      { action: 'close browser', timeout: 20_000 },
+    );
+    await new Promise((r) => setTimeout(r, 2500));
+    const opened = await browser.open();
+    say(opened.ok ? green(`  ${which} is up and Woboo is attached.`) : red(`  ${opened.error}`));
+    return opened.ok ? 0 : 1;
+  }
+
+  say(`  browser   ${cyan(exe || 'none found')}`);
+  const profile = loadSettings().browserProfile;
+  say(`  profile   ${bold(profile)} ${dim(profile === 'mine' ? '(your logins)' : '(blank)')}`);
+  const state = await browser.open();
+  say(`  attached  ${state.ok ? green('yes') : red('no')}`);
+  if (!state.ok) {
+    say('');
+    say(dim(`  ${state.error}`));
+  }
+  say('');
+  say(dim('  woboo browser mine       drive your real profile, with your logins'));
+  say(dim('  woboo browser own        drive a blank profile it cannot take anything from'));
+  say(dim('  woboo browser --restart  reopen the browser with debugging enabled'));
+  return 0;
+}
+
 // Reachable from your phone. Long polling, so no public URL and no inbound port.
 async function cmdTelegram() {
   const secrets = loadSecrets();
@@ -561,6 +615,7 @@ function parse(argv) {
     else if (token === '--port') flags.port = Number(argv[++i]);
     else if (token === '--workspace') flags.workspace = argv[++i];
     else if (token === '--dry') flags.dry = true;
+    else if (token === '--restart') flags.restart = true;
     else if (token === '--help' || token === '-h') flags.help = true;
     else rest.push(token);
   }
@@ -582,6 +637,8 @@ async function main() {
       return cmdWidget();
     case 'drive':
       return cmdDrive(args.join(' ').trim(), flags);
+    case 'browser':
+      return cmdBrowser(args, flags);
     case 'telegram':
       return cmdTelegram();
     case 'memory':

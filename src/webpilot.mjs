@@ -55,7 +55,10 @@ Never buy, send, post, delete or confirm anything that the goal did not ask for.
 
 function pageForModel(page) {
   const list = page.elements
-    .map((e) => `[${e.i}] ${e.tag}${e.type ? `/${e.type}` : ''} ${e.inView ? '' : '(below) '}${e.text}`)
+    .map((e) => {
+      const filled = e.value ? `  ← currently contains: "${e.value}"` : '';
+      return `[${e.i}] ${e.tag}${e.type ? `/${e.type}` : ''} ${e.inView ? '' : '(below) '}${e.text}${filled}`;
+    })
     .join('\n');
   return `URL: ${page.url}
 TITLE: ${page.title}
@@ -84,6 +87,7 @@ export async function browse({ goal, url = null, maxSteps = 14, ask, onProgress 
   }
 
   const history = [];
+  const recent = [];
   for (let step = 1; step <= maxSteps; step += 1) {
     assertLive('web');
     const page = await browser.snapshot();
@@ -101,6 +105,26 @@ export async function browse({ goal, url = null, maxSteps = 14, ask, onProgress 
     });
 
     const label = page.elements[decision.index]?.text?.slice(0, 40) || '';
+
+    // Repeating the same move on the same element means the page is not
+    // responding the way the model expects, and doing it a fourth time will not
+    // help. Stop and say what is stuck rather than hammering the field forever.
+    const signature = `${decision.action}:${decision.index}:${decision.text?.slice(0, 30) || ''}`;
+    recent.push(signature);
+    if (recent.length > 4) recent.shift();
+    if (recent.length >= 3 && recent.slice(-3).every((s) => s === signature)) {
+      setFace('confused', 'stuck in a loop');
+      return {
+        ok: false,
+        out:
+          `Stuck: tried to ${decision.action} on "${label || decision.text}" three times and the page did not ` +
+          `move on. It is probably waiting for something Woboo cannot supply — a login, a captcha, or a ` +
+          `field that rejects what was typed.`,
+        steps: step,
+        url: page.url,
+      };
+    }
+
     say(`${decision.action}${decision.index >= 0 ? ` [${decision.index}] ${label}` : ''} — ${decision.thought}`);
     publish({ type: 'web', action: decision.action, detail: label || decision.text });
 

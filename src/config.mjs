@@ -36,6 +36,10 @@ const DEFAULTS = {
   port: 4477,
   // Which brain plans: 'auto' (Anthropic, else NIM), 'anthropic', or 'nim'.
   provider: 'auto',
+  // Which browser profile Woboo drives. 'own' is a scratch profile it cannot
+  // take anything from — safe, but logged in to nothing. 'mine' uses your real
+  // Chrome profile, so it acts as you: your Gmail, your sessions, your history.
+  browserProfile: 'own',
   // How Woboo prefers to work. 'gui' makes it use the real mouse and keyboard
   // wherever a task could plausibly be done on screen — you watch it happen.
   // 'commands' keeps everything invisible and scriptable. 'auto' lets the plan

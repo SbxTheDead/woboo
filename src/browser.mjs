@@ -16,8 +16,10 @@
 // had a WebSocket client built in since v22, so it costs no dependency at all.
 
 import { spawn } from 'node:child_process';
+import { loadSettings } from './config.mjs';
 import { record } from './journal.mjs';
 import { assertLive } from './guard.mjs';
+import { exec } from './ps.mjs';
 import { browserPath } from './toolbox.mjs';
 
 const PORT = 9333;
@@ -52,21 +54,67 @@ async function waitForBrowser(seconds = 20) {
 // Attach to a browser already running with debugging enabled, or start one.
 // A separate user-data-dir keeps this out of the owner's real profile: their
 // tabs, cookies and logins are not Woboo's to rummage through by default.
+// Woboo's own browser profile, or the owner's real one.
+//
+// A scratch profile is the safe default: Woboo cannot see the owner's history,
+// cookies or sessions. It is also useless for anything that needs a login —
+// asked to open Gmail it lands on a sign-in page and has no way past it.
+//
+// Using the real profile is the owner's call, so it is a setting. The catch is
+// Chrome's: a profile can only be open in one process, so if Chrome is already
+// running the flag is ignored and a new window quietly joins the existing
+// process — with no debugging port. That failure is silent, which is worse than
+// loud, so it is detected and explained rather than guessed at.
+function profileArgs() {
+  const useReal = loadSettings().browserProfile === 'mine';
+  if (!useReal) {
+    return [`--user-data-dir=${process.env.TEMP || '.'}\\woboo-browser`];
+  }
+  const root = `${process.env.LOCALAPPDATA || ''}\\Google\\Chrome\\User Data`;
+  return [`--user-data-dir=${root}`, '--profile-directory=Default'];
+}
+
+// Is a browser of this kind already running? If so its profile is locked and
+// a new launch cannot take the debugging port.
+async function alreadyRunning(exeName) {
+  const result = await exec('tasklist.exe', ['/FI', `IMAGENAME eq ${exeName}`, '/FO', 'CSV'], {
+    timeout: 8000,
+    action: 'check browser',
+  }).catch(() => ({ ok: false, out: '' }));
+  return result.ok && result.out.toLowerCase().includes(exeName.toLowerCase());
+}
+
 export async function open({ fresh = false } = {}) {
   assertLive('browser');
   if (socket && socket.readyState === 1) return { ok: true, reused: true };
 
+  // Something already listening on the port is a browser Woboo can drive,
+  // whoever started it.
   let page = await waitForBrowser(1);
   if (!page) {
     const exe = browserPath();
     if (!exe) return { ok: false, error: 'no Chrome or Edge found to drive' };
     const which = /chrome\.exe$/i.test(exe) ? 'Chrome' : 'Edge';
+    const exeName = which === 'Chrome' ? 'chrome.exe' : 'msedge.exe';
+    const wantsReal = loadSettings().browserProfile === 'mine';
+
+    if (wantsReal && (await alreadyRunning(exeName))) {
+      return {
+        ok: false,
+        needsRestart: which,
+        error:
+          `${which} is already running, so Woboo cannot attach to your logged-in profile — ` +
+          `${which} only allows one process per profile, and the running one has no debugging port. ` +
+          `Close ${which} completely and try again (your tabs will restore), or run ` +
+          `\`woboo browser --restart\` to do it for you.`,
+      };
+    }
 
     child = spawn(
       exe,
       [
         `--remote-debugging-port=${PORT}`,
-        `--user-data-dir=${process.env.TEMP || '.'}\\woboo-${which.toLowerCase()}`,
+        ...profileArgs(),
         '--no-first-run',
         '--no-default-browser-check',
         '--start-maximized',
@@ -76,7 +124,7 @@ export async function open({ fresh = false } = {}) {
       { detached: true, stdio: 'ignore' },
     );
     child.unref();
-    record('browser', `launched ${which} with the DevTools port on ${PORT}`);
+    record('browser', `launched ${which} (${wantsReal ? 'your profile' : "Woboo's own profile"}) on port ${PORT}`);
     page = await waitForBrowser(20);
     if (!page) return { ok: false, error: 'browser did not open a debuggable page' };
   }
@@ -183,6 +231,11 @@ const COLLECT = `(() => {
       text,
       href: (el.getAttribute('href') || '').slice(0, 120),
       inView: box.top >= 0 && box.top < innerHeight,
+      // What is currently IN the field. Without this the model cannot tell that
+      // it already typed here, so it types again, and again — the page looks
+      // identical to it every time.
+      value: (el.value === undefined ? '' : String(el.value)).slice(0, 60),
+      focused: el === document.activeElement,
     });
     el.setAttribute('data-woboo', String(out.length - 1));
     if (out.length >= 120) break;
