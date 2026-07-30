@@ -375,6 +375,19 @@ to change, and do not restate the whole original task.`;
 // Deliberately dumb and completely predictable: hand the whole task to the
 // coding tool, then run whatever test command the project already defines.
 
+// When the brain could not be reached, there is no plan — and pretending
+// otherwise is worse than failing. The old fallback echoed a line about missing
+// coding tools and reported "All 1 steps done", which reads as success for work
+// that never happened. A mission nobody could plan must say so.
+export function unplannable({ task, reason }) {
+  return {
+    summary: `Could not plan "${task}"`,
+    unplanned: true,
+    reason,
+    steps: [],
+  };
+}
+
 export function offlinePlan({ task, workspace, crew, reason = '' }) {
   const verify = guessVerify(workspace);
   const steps = [];

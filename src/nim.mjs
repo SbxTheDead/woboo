@@ -117,12 +117,27 @@ async function ask({ system, prompt, schema, name, maxTokens = 8000, think = tru
     body.chat_template_kwargs = { enable_thinking: false };
   }
 
-  const post = () =>
-    fetch(`${BASE}/chat/completions`, {
-      method: 'POST',
-      headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    });
+  // A dropped wifi packet is not a reason to abandon a mission. fetch() rejects
+  // on a network fault rather than returning a status, so the HTTP retry below
+  // never sees it — this catches the case where there is no response at all.
+  const post = async () => {
+    let lastError;
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        return await fetch(`${BASE}/chat/completions`, {
+          method: 'POST',
+          headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(180_000),
+        });
+      } catch (err) {
+        lastError = err;
+        record('brain', `network fault reaching NIM (${err.message}); retry ${attempt}/3`, { level: 'warn' });
+        await new Promise((resolve) => setTimeout(resolve, attempt * 2500));
+      }
+    }
+    throw lastError;
+  };
 
   // Not every model on the catalogue accepts every extra. Rather than keep a
   // compatibility table that rots, shed the optional parts one at a time and

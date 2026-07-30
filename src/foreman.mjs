@@ -87,16 +87,35 @@ export async function runMission(task, { workspace } = {}) {
       } catch (err) {
         // A brain that is unreachable or declines should not end the mission —
         // fall back to the deterministic plan and say so.
-        record('brain', `planning failed (${err.message}); using the offline plan`, { level: 'warn' });
-        plan = brain.offlinePlan({
-          task,
-          workspace: cwd,
-          crew: mission.crew,
-          reason: `the brain was unreachable: ${err.message.slice(0, 90)}`,
-        });
+        record('brain', `planning failed: ${err.message}`, { level: 'error' });
+        // The deterministic fallback is only useful when there is a crew tool to
+        // hand the whole task to. Without one it can do nothing real, and
+        // running its placeholder step would report success for untouched work.
+        plan = mission.crew
+          ? brain.offlinePlan({
+              task,
+              workspace: cwd,
+              crew: mission.crew,
+              reason: `the brain was unreachable: ${err.message.slice(0, 90)}`,
+            })
+          : brain.unplannable({ task, reason: err.message });
       }
     } else {
       plan = brain.offlinePlan({ task, workspace: cwd, crew: mission.crew });
+    }
+
+    // No plan means no mission. Fail here rather than running a placeholder and
+    // calling it done.
+    if (plan.unplanned) {
+      mission.summary = plan.summary;
+      mission.state = 'failed';
+      mission.report =
+        `Couldn't reach the brain, so nothing was planned or done — ${plan.reason}. ` +
+        `Your task is unchanged; try it again.`;
+      setFace('error', 'could not reach the brain');
+      record('mission', mission.report, { level: 'error' });
+      snapshot();
+      return mission;
     }
 
     mission.summary = plan.summary;
