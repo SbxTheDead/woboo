@@ -83,14 +83,13 @@ function extractJson(text) {
   throw new Error(`NIM returned something unparseable:\n${trimmed.slice(0, 400)}`);
 }
 
-async function ask({ system, prompt, schema, name, maxTokens = 4000 }) {
+async function ask({ system, prompt, schema, name, maxTokens = 8000, think = true }) {
   const key = apiKey();
   if (!key) throw new Error('no NVIDIA key — run `woboo secret nvidia nvapi-...`');
 
   const body = {
     model: model(),
     max_tokens: maxTokens,
-    temperature: 0.2,
     messages: [
       { role: 'system', content: system },
       {
@@ -101,21 +100,39 @@ async function ask({ system, prompt, schema, name, maxTokens = 4000 }) {
     response_format: { type: 'json_schema', json_schema: { name, schema, strict: true } },
   };
 
-  let response = await fetch(`${BASE}/chat/completions`, {
-    method: 'POST',
-    headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  // Nemotron reasons before answering when asked to, and a plan is exactly the
+  // kind of work that benefits. The reasoning comes back on its own field, so
+  // the answer stays clean JSON. NVIDIA's guidance for thinking mode is a warm
+  // temperature; without it, the usual near-deterministic setting.
+  if (think) {
+    body.temperature = 1;
+    body.top_p = 0.95;
+    body.chat_template_kwargs = { enable_thinking: true };
+    body.reasoning_budget = Math.min(16384, maxTokens * 2);
+  } else {
+    body.temperature = 0.2;
+  }
 
-  // A model that will not take a schema still takes the instruction in the
-  // prompt, so drop the parameter rather than the request.
-  if (response.status === 400 || response.status === 422) {
-    delete body.response_format;
-    response = await fetch(`${BASE}/chat/completions`, {
+  const post = () =>
+    fetch(`${BASE}/chat/completions`, {
       method: 'POST',
       headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
       body: JSON.stringify(body),
     });
+
+  // Not every model on the catalogue accepts every extra. Rather than keep a
+  // compatibility table that rots, shed the optional parts one at a time and
+  // keep the request — the schema also lives in the prompt, and thinking is a
+  // quality lever, not a requirement.
+  let response = await post();
+  if (response.status === 400 || response.status === 422) {
+    delete body.chat_template_kwargs;
+    delete body.reasoning_budget;
+    response = await post();
+  }
+  if (response.status === 400 || response.status === 422) {
+    delete body.response_format;
+    response = await post();
   }
 
   if (!response.ok) {
@@ -135,13 +152,18 @@ async function ask({ system, prompt, schema, name, maxTokens = 4000 }) {
 // ── the two calls the foreman makes ───────────────────────────────────────────
 // Same shapes brain.mjs produces, so the foreman cannot tell which brain it got.
 
-export async function plan({ task, workspace, crew, memory = '', schema, system }) {
+export async function plan({ task, workspace, crew, memory = '', toolbox = '', schema, system }) {
   const prompt = `Owner's task:
 ${task}
 
 Workspace: ${workspace}
 Coding tool available for delegation: ${crew || 'none installed — avoid "delegate" steps and use "shell" instead'}
 Platform: ${process.platform}
+Shell commands run in: ${process.platform === 'win32' ? 'PowerShell (not cmd.exe)' : '/bin/sh'}
+${toolbox ? `
+What is actually available on this machine:
+${toolbox}
+` : ''}
 ${memory ? `\nWhat Woboo already knows about this workspace:\n\n${memory}\n` : ''}
 Produce the plan.`;
 

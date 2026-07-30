@@ -13,6 +13,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { loadSettings } from './config.mjs';
 import * as nim from './nim.mjs';
+import { describe as describeTools } from './toolbox.mjs';
 import { record } from './journal.mjs';
 
 const PLAN_SCHEMA = {
@@ -83,6 +84,13 @@ reporting back. Plan for that shape:
   really work. Prefer the project's own tests, build, or typecheck. If a step
   genuinely cannot be checked by a command, use an empty string rather than a
   command that always passes.
+- A verify is judged ONLY by its exit code, so it must actually set one. A bare
+  expression is worthless: "Test-Path 'x'" and "(Test-Path 'x') -and (...)" both
+  print True or False and exit 0 either way, so they pass even when the step
+  failed. Always branch explicitly:
+      if ((Test-Path 'x') -and ((Get-Item 'x').Length -gt 0)) { exit 0 } else { exit 1 }
+  Commands that already exit properly on failure — npm test, git, tsc — need no
+  wrapping.
 - Use "shell" steps for setup and checks, never for tasks a coding tool should do.
 - Use "computer" steps for work that only exists on screen: browsing the web,
   clicking through a GUI, reading a desktop app's interface. Woboo will look at the
@@ -97,12 +105,9 @@ reporting back. Plan for that shape:
   travel through JSON, and a double quote has to be escaped on the way, which is
   where malformed commands come from. Single quotes need no escaping and are
   literal in PowerShell, which is what a path wants anyway.
-- Do not assume a tool is installed. Build steps on git, node, npm, python or the
-  project's own scripts; planning around pandoc, curl, wget or jq when they may
-  be absent produces a step that cannot run.
-- A "shell" step cannot browse the web. If a task needs information from the
-  internet and no coding tool is available to fetch it, say so plainly in the
-  summary and plan only what can actually be done.
+- Build only on tools the request says are installed. That list is measured on
+  the actual machine, not guessed: if something is not on it, a step using it
+  cannot run, no matter how standard the tool seems.
 - Keep the plan short. Two good steps beat six speculative ones.
 
 Deliver what the owner asked for at the scope they intended. Do not widen the task.`;
@@ -242,8 +247,11 @@ async function ask({ prompt, schema, maxTokens = 16_000 }) {
 }
 
 export async function plan({ task, workspace, crew, memory = '' }) {
+  // What is genuinely installed, so the plan is built on tools that exist.
+  const toolbox = await describeTools().catch(() => '');
+
   if (provider() === 'nim') {
-    return nim.plan({ task, workspace, crew, memory, schema: PLAN_SCHEMA, system: SYSTEM });
+    return nim.plan({ task, workspace, crew, memory, toolbox, schema: PLAN_SCHEMA, system: SYSTEM });
   }
   const prompt = `Owner's task:
 ${task}
@@ -254,11 +262,13 @@ Platform: ${process.platform}
 Shell commands run in: ${process.platform === 'win32' ? 'PowerShell (not cmd.exe)' : '/bin/sh'}
 
 What Woboo can actually do right now:
-- run shell commands in the workspace${crew ? '' : ' (this is the only way to act)'}
-${crew ? `- hand a written spec to ${crew}, which can read and write files and reach the web` : '- it CANNOT reach the internet: no coding tool is installed, and a shell step has no way to browse or download'}
-- look at the screen, and drive the mouse and keyboard in a "computer" step
-If the task needs something in that gap, say so in the summary rather than
-planning a step that cannot possibly work.
+- run shell commands in the workspace${crew ? '' : ' (this is the main way to act)'}
+${crew ? `- hand a written spec to ${crew}, which can read and write files` : '- no coding tool is installed, so there is nothing to delegate to'}
+- look at the screen, and drive the mouse and keyboard in a "computer" step —
+  use this for anything that only exists in a GUI
+${toolbox}
+If the task needs something outside all of that, say so in the summary rather
+than planning a step that cannot possibly work.
 ${
   memory
     ? `

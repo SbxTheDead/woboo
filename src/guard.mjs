@@ -95,8 +95,19 @@ const ALLOWED = new Set([
   // Reading paths, and creating them. Deletion is deliberately absent: the
   // FORBIDDEN patterns below refuse recursive removal outright, and anything
   // else destructive still has to come and ask.
-  'mkdir', 'test-path', 'new-item', 'get-content', 'get-childitem',
+  'mkdir', 'test-path', 'new-item', 'get-content', 'get-childitem', 'get-item',
   'join-path', 'resolve-path', 'select-string', 'out-file', 'set-content',
+  'get-date', 'measure-object', 'select-object', 'where-object', 'sort-object',
+  'foreach-object', 'convertto-json', 'convertfrom-json', 'write-output',
+]);
+
+// PowerShell control flow and operators. Skipped when hunting for the verb —
+// they are the sentence's grammar, not its verb. Deliberately does not include
+// anything that runs something: no `&`, no `.`, no Invoke-Expression.
+const KEYWORDS = new Set([
+  'if', 'else', 'elseif', 'switch', 'foreach', 'for', 'while', 'do', 'until',
+  'try', 'catch', 'finally', 'begin', 'process', 'end', 'return', 'exit',
+  'break', 'continue', 'param', 'function', 'not', 'in', 'then', 'fi', 'esac',
 ]);
 
 // Patterns that are never worth asking about. Ordered roughly by how bad.
@@ -125,12 +136,31 @@ export function classifyCommand(raw) {
   const settings = loadSettings();
   const trusted = new Set([...ALLOWED, ...(settings.allowCommands || [])]);
 
-  // Every segment of a chained command has to clear the bar on its own,
-  // otherwise `npm test && <anything>` would ride in on the first verb.
-  const segments = cmd.split(/&&|\|\||;|\|/g).map((s) => s.trim()).filter(Boolean);
+  // Every place a command can start has to clear the bar on its own, otherwise
+  // `npm test && <anything>` rides in on the first verb. Braces and parens count
+  // as separators too: PowerShell control flow puts real commands inside them,
+  // and a check that only ever looked at the first token would see `if` and wave
+  // through whatever the block contained.
+  const segments = cmd
+    .split(/&&|\|\||[;|(){}\n]/g)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
   for (const segment of segments) {
     const verb = (segment.match(/^"?([^\s"]+)"?/) || [])[1] || '';
     const bare = verb.split(/[\\/]/).pop().replace(/\.(exe|cmd|bat|ps1)$/i, '').toLowerCase();
+
+    // Language, not commands: keywords, variables, operators, literals. These
+    // cannot execute anything by themselves — whatever they guard or compare is
+    // its own segment and gets classified on its own merits.
+    if (!bare) continue;
+    if (KEYWORDS.has(bare)) continue;
+    // Variables, switches, quoted literals, numbers, array indexing.
+    if (/^[$\-'"[\d]/.test(bare)) continue;
+    // Property or method access such as `.Length`. A bare `.` is NOT skipped:
+    // on its own it is PowerShell's dot-source operator, which runs a script.
+    if (/^\.\w/.test(bare)) continue;
+
     if (!trusted.has(bare)) {
       return { verdict: 'ask', reason: `"${bare}" is not on the allowlist`, verb: bare };
     }

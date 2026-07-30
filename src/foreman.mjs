@@ -158,6 +158,26 @@ export async function runMission(task, { workspace } = {}) {
   return mission;
 }
 
+// A verify is judged only by its exit code, and PowerShell hands out 0 for a
+// bare expression whatever it evaluates to — `Test-Path 'missing'` prints False
+// and exits 0. That is a check which cannot fail, which is worse than no check
+// at all: it makes Woboo confidently report proven work that was never proven.
+//
+// Planners are told to branch explicitly, and mostly do. This is the backstop
+// for when they don't. Commands that already set an exit code (npm, git, tsc,
+// anything containing its own `exit`) are left exactly as written, so their
+// output still reaches the repair loop intact.
+const SETS_OWN_EXIT =
+  /^\s*(npm|npx|pnpm|yarn|bun|deno|node|git|go|cargo|dotnet|mvn|gradle|python3?|py|pip|pytest|ruff|uv|jest|vitest|tsc|eslint|prettier|make)\b/i;
+
+export function asExitCode(command) {
+  const trimmed = String(command || '').trim();
+  if (!trimmed || process.platform !== 'win32') return trimmed;
+  if (/\bexit\b/i.test(trimmed) || SETS_OWN_EXIT.test(trimmed)) return trimmed;
+  // Anything else is treated as a condition: true passes, false fails.
+  return `if (${trimmed}) { exit 0 } else { exit 1 }`;
+}
+
 async function runStep(i, { cwd, member, task }) {
   const step = mission.steps[i];
   const settings = loadSettings();
@@ -223,7 +243,7 @@ async function runStep(i, { cwd, member, task }) {
 
     setStep(i, { status: 'verifying' });
     setFace('testing', `checking: ${step.verify}`);
-    const check = await run(step.verify, { cwd, label: `verify ${step.title}` });
+    const check = await run(asExitCode(step.verify), { cwd, label: `verify ${step.title}` });
     setStep(i, { verifyOutput: check.out });
 
     if (check.ok) {
