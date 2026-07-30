@@ -145,6 +145,14 @@ export async function start({ token, onPairCode } = {}) {
 
     if (event.type === 'mission' && event.mission) {
       const m = event.mission;
+
+      // Planning can take a minute, and silence in a chat reads as "broken"
+      // rather than "working". Say it started, once.
+      if (m.state === 'planning' && !seenSteps.has(`think:${m.id}`)) {
+        seenSteps.add(`think:${m.id}`);
+        tell('🧠 <i>working out how to do that…</i>');
+      }
+
       if (m.state === 'running' && m.summary && !seenSteps.has(`plan:${m.id}`)) {
         seenSteps.add(`plan:${m.id}`);
         const steps = m.steps.map((s, i) => `${i + 1}. ${esc(s.title)}`).join('\n');
@@ -156,7 +164,13 @@ export async function start({ token, onPairCode } = {}) {
         if (step.status !== 'ok' && step.status !== 'failed') continue;
         if (seenSteps.has(key)) continue;
         seenSteps.add(key);
-        tell(`${step.status === 'ok' ? '✅' : '❌'} ${esc(step.title)}`);
+        // A bare ❌ tells the owner nothing. The reason is the whole message:
+        // "Chrome is already running" is actionable, "failed" is not.
+        const why = step.status === 'failed' ? (step.output || step.verifyOutput || '').trim() : '';
+        tell(
+          `${step.status === 'ok' ? '✅' : '❌'} ${esc(step.title)}` +
+            (why ? `\n<i>${esc(why.slice(0, 400))}</i>` : ''),
+        );
       }
       if ((m.state === 'done' || m.state === 'failed' || m.state === 'stopped') && !seenSteps.has(`end:${m.id}`)) {
         seenSteps.add(`end:${m.id}`);

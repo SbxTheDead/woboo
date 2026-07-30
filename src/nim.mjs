@@ -128,7 +128,11 @@ async function ask({ system, prompt, schema, name, maxTokens = 8000, think = tru
           method: 'POST',
           headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
           body: JSON.stringify(body),
-          signal: AbortSignal.timeout(180_000),
+          // Measured: a plan comes back in 2–60 seconds. A request still open
+          // at 75 is not slow, it is lost — and waiting three minutes to find
+          // that out, then retrying twice, turns one dropped packet into five
+          // minutes of a machine that looks dead.
+          signal: AbortSignal.timeout(75_000),
         });
       } catch (err) {
         lastError = err;

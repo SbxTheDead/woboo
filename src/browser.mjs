@@ -139,15 +139,41 @@ export async function open({ fresh = false } = {}) {
   let page = await waitForBrowser(1);
   if (!page) {
     if (wantsReal && (await alreadyRunning(exeName))) {
-      return {
-        ok: false,
-        needsRestart: which,
-        error:
-          `${which} is already running, so Woboo cannot attach to your logged-in profile — ` +
-          `${which} only allows one process per profile, and the running one has no debugging port. ` +
-          `Close ${which} completely and try again (your tabs will restore), or run ` +
-          `\`woboo browser --restart\` to do it for you.`,
-      };
+      // Chrome allows one process per profile, so reaching the owner's
+      // logged-in profile means restarting it. That is their window and their
+      // tabs, so ask — but ask rather than dead-ending, because "I cannot do
+      // this" when a single tap would fix it is a bad answer.
+      const restart = await consult.ask({
+        question: `Restart ${which} so Woboo can use your logged-in profile?`,
+        detail:
+          `${which} only allows one process per profile, and the one running now has no debugging port. ` +
+          `Your tabs will restore.`,
+        options: [
+          { label: `Yes, restart ${which}`, value: 'restart' },
+          { label: 'No, use a blank profile instead', value: 'own' },
+        ],
+        timeout: 180,
+      });
+
+      if (restart === 'own') {
+        saveSettings({ browserProfile: 'own' });
+        record('browser', 'owner chose a blank profile instead of restarting', { level: 'warn' });
+      } else if (restart === 'restart') {
+        record('browser', `restarting ${which} to attach to the owner's profile`, { level: 'warn' });
+        await exec('taskkill.exe', ['/F', '/IM', exeName], { timeout: 15_000, action: 'restart browser' }).catch(
+          () => {},
+        );
+        await new Promise((r) => setTimeout(r, 3000));
+      } else {
+        return {
+          ok: false,
+          needsRestart: which,
+          error:
+            `${which} is already running and Woboo cannot attach to your logged-in profile while it is — ` +
+            `${which} allows one process per profile, and the running one has no debugging port. ` +
+            `Close ${which} and try again, or run \`woboo browser --restart\`.`,
+        };
+      }
     }
 
     child = spawn(
