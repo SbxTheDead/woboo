@@ -131,7 +131,7 @@ async function perform(block) {
       break;
 
     case 'key':
-      await hands.pressKey(toSendKeys(String(text ?? '')));
+      await hands.pressKey(String(text ?? ''));
       break;
 
     case 'scroll':
@@ -340,7 +340,7 @@ async function driveWithNim({ goal, maxSteps, onProgress, dryRun = false }) {
           await hands.typeText(String(act.text ?? ''));
           break;
         case 'key':
-          await hands.pressKey(toSendKeys(String(act.combo ?? act.text ?? '')));
+          await hands.pressKey(String(act.combo ?? act.text ?? ''));
           break;
         case 'scroll':
           await hands.scroll(...toReal(pixel || [shot.width / 2, shot.height / 2], shot), act.direction || 'down', 3);

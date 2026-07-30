@@ -106,19 +106,102 @@ Write-Output typed
   return { ok: result.ok, out: result.out };
 }
 
-// combo uses SendKeys syntax: '^s' is Ctrl+S, '%{F4}' is Alt+F4, '{ENTER}'.
+// Virtual-key codes. SendKeys was the obvious choice for this and the wrong one:
+// it has no code for the Windows key at all, so every "press Win to open Start"
+// silently did nothing and the pilot typed into the desktop. keybd_event speaks
+// the codes directly and can press anything on the keyboard.
+const VK = {
+  win: 0x5b, lwin: 0x5b, super: 0x5b, meta: 0x5b, cmd: 0x5b,
+  ctrl: 0x11, control: 0x11, alt: 0x12, shift: 0x10,
+  enter: 0x0d, return: 0x0d, tab: 0x09, esc: 0x1b, escape: 0x1b,
+  backspace: 0x08, back: 0x08, delete: 0x2e, del: 0x2e, insert: 0x2d,
+  home: 0x24, end: 0x23, pageup: 0x21, pagedown: 0x22,
+  up: 0x26, down: 0x28, left: 0x25, right: 0x27,
+  space: 0x20, spacebar: 0x20, capslock: 0x14, printscreen: 0x2c,
+};
+for (let i = 1; i <= 12; i += 1) VK[`f${i}`] = 0x6f + i;
+
+const MODIFIERS = new Set(['ctrl', 'control', 'alt', 'shift', 'win', 'lwin', 'super', 'meta', 'cmd']);
+
+// Models write keys every way a person might: "Windows key", "press Enter",
+// '"Enter"', "ctrl+L", "Win". Normalise before touching the keyboard rather than
+// splitting on whitespace and pressing the word "key".
+export function parseCombo(input) {
+  const cleaned = String(input ?? '')
+    .replace(/["'`]/g, '')
+    .replace(/[{}]/g, '')
+    .trim()
+    .toLowerCase()
+    .replace(/\b(press|hit|the|button)\b/g, ' ')
+    // "Windows key" / "enter key" — the trailing noun is not a key.
+    .replace(/\bkey\b/g, ' ')
+    .replace(/\bwindows\b/g, 'win')
+    .replace(/\s*\+\s*/g, '+')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!cleaned) return null;
+
+  // Whitespace between named keys means "and", not a second chord to guess at.
+  const parts = cleaned.split(/[+\s]+/).filter(Boolean);
+  const mods = [];
+  let main = null;
+  for (const part of parts) {
+    if (MODIFIERS.has(part)) {
+      mods.push(VK[part]);
+      continue;
+    }
+    if (VK[part] !== undefined) main = VK[part];
+    else if (part.length === 1) main = part.toUpperCase().charCodeAt(0);
+  }
+
+  // "win" alone is a real instruction: open Start.
+  if (main === null && mods.length) return { mods: mods.slice(0, -1), main: mods[mods.length - 1] };
+  if (main === null) return null;
+  return { mods, main };
+}
+
+const KEY_SHIM = `
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public class WoboKeys {
+  [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, int extra);
+}
+"@
+`;
+
 export async function pressKey(combo) {
-  await permit('press key', combo);
+  const parsed = parseCombo(combo);
+  if (!parsed) {
+    record('hands', `could not read the key "${combo}"`, { level: 'warn' });
+    return { ok: false, out: `not a key I recognise: ${combo}` };
+  }
+
+  const readable = [...parsed.mods, parsed.main]
+    .map((vk) => Object.keys(VK).find((k) => VK[k] === vk) || String.fromCharCode(vk))
+    .join('+');
+
+  await permit('press key', readable);
   if (!isWindows()) return unsupported('press key');
+
+  // Modifiers down, key down, key up, modifiers up — in that order, or the
+  // combination is never actually held.
+  const down = parsed.mods.map((vk) => `[WoboKeys]::keybd_event(${vk}, 0, 0, 0)`).join('\n');
+  const up = [...parsed.mods].reverse().map((vk) => `[WoboKeys]::keybd_event(${vk}, 0, 2, 0)`).join('\n');
 
   const source = `
 $ErrorActionPreference = 'Stop'
-Add-Type -AssemblyName System.Windows.Forms
-[System.Windows.Forms.SendKeys]::SendWait('${psLiteral(combo)}')
+${KEY_SHIM}
+${down}
+[WoboKeys]::keybd_event(${parsed.main}, 0, 0, 0)
+Start-Sleep -Milliseconds 40
+[WoboKeys]::keybd_event(${parsed.main}, 0, 2, 0)
+${up}
 Write-Output pressed
 `;
   const result = await script(source, { action: 'press key' });
-  record('hands', `pressed ${combo}`, { level: result.ok ? 'ok' : 'error' });
+  record('hands', `pressed ${readable}`, { level: result.ok ? 'ok' : 'error' });
   return { ok: result.ok, out: result.out };
 }
 
