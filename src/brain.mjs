@@ -107,6 +107,15 @@ reporting back. Plan for that shape:
   Leave its "verify" empty — the step checks its own work with an editor pass.
 - Use "compose" only to write from files that are ALREADY on disk. If the
   material still has to be found, that is "research".
+- A "web" step is ONE step for the whole browser errand, not one per click. It
+  runs its own loop: it opens the page, reads what is actually on it, clicks,
+  types, and keeps going until the goal is met. Splitting "open Gmail", "click
+  compose", "type the address", "click send" into four steps is wrong — each
+  would start a fresh browser and lose the last one's progress. Write it as one
+  instruction stating the whole errand:
+    "In Gmail, send an email to sam@example.com with the subject 'Report' and
+     the elephants PDF attached."
+  Its "verify" is usually empty: the step reports what it saw on the page.
 - Use "computer" steps for anything that happens on the owner's screen. Woboo
   looks at the display and drives the real mouse and keyboard. State the goal,
   not the clicks — it works out where to click by looking.
@@ -273,13 +282,14 @@ export async function plan({ task, workspace, crew, memory = '' }) {
   const prefer = loadSettings().prefer || 'auto';
   const stance =
     prefer === 'gui'
-      ? 'The owner has set Woboo to work on screen. Use computer steps for anything ' +
-        'that has a visible surface, even when a command could do it invisibly. They ' +
-        'want to watch their machine being used. Reserve shell for work with no ' +
-        'window at all: files, git, builds, tests.'
+      ? 'The owner has set Woboo to work visibly rather than invisibly. Prefer "web" ' +
+        'steps: a real browser window they can watch, driven through the page itself. ' +
+        'Use "computer" ONLY for native desktop applications that have no web version, ' +
+        'because it costs about 150 seconds per action against 16 milliseconds for a ' +
+        'web step. Working visibly means driving the browser, not photographing it.'
       : prefer === 'commands'
-        ? 'The owner has set Woboo to prefer commands. Avoid computer steps unless ' +
-          'the task genuinely cannot be done any other way.'
+        ? 'The owner has set Woboo to prefer commands. Avoid web and computer steps ' +
+          'unless the task genuinely cannot be done any other way.'
         : '';
   // What is genuinely installed, so the plan is built on tools that exist.
   const toolbox = [await describeTools().catch(() => ''), describeReach()]

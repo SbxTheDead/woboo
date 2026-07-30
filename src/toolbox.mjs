@@ -28,6 +28,27 @@ const EDGE_PATHS = [
   'C:/Program Files/Microsoft/Edge/Application/msedge.exe',
 ];
 
+// Chrome first when it is there — it is what the owner actually uses, so a
+// login they already have is a login Woboo can use. Edge is the fallback
+// because it is on every Windows machine, which is why it renders the PDFs.
+const CHROME_PATHS = [
+  'C:/Program Files/Google/Chrome/Application/chrome.exe',
+  'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
+  `${process.env.LOCALAPPDATA || ''}/Google/Chrome/Application/chrome.exe`,
+];
+
+export function chromePath() {
+  for (const candidate of CHROME_PATHS) {
+    if (candidate && fs.existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
+// The browser Woboo should drive: the owner's, if they have one.
+export function browserPath() {
+  return chromePath() || edgePath();
+}
+
 let cache = null;
 
 export function edgePath() {

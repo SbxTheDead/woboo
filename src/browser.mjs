@@ -18,7 +18,7 @@
 import { spawn } from 'node:child_process';
 import { record } from './journal.mjs';
 import { assertLive } from './guard.mjs';
-import { edgePath } from './toolbox.mjs';
+import { browserPath } from './toolbox.mjs';
 
 const PORT = 9333;
 const HOST = '127.0.0.1';
@@ -58,14 +58,15 @@ export async function open({ fresh = false } = {}) {
 
   let page = await waitForBrowser(1);
   if (!page) {
-    const exe = edgePath();
-    if (!exe) return { ok: false, error: 'Microsoft Edge not found' };
+    const exe = browserPath();
+    if (!exe) return { ok: false, error: 'no Chrome or Edge found to drive' };
+    const which = /chrome\.exe$/i.test(exe) ? 'Chrome' : 'Edge';
 
     child = spawn(
       exe,
       [
         `--remote-debugging-port=${PORT}`,
-        `--user-data-dir=${process.env.TEMP || '.'}\\woboo-browser`,
+        `--user-data-dir=${process.env.TEMP || '.'}\\woboo-${which.toLowerCase()}`,
         '--no-first-run',
         '--no-default-browser-check',
         '--start-maximized',
@@ -75,7 +76,7 @@ export async function open({ fresh = false } = {}) {
       { detached: true, stdio: 'ignore' },
     );
     child.unref();
-    record('browser', `launched Edge with the DevTools port on ${PORT}`);
+    record('browser', `launched ${which} with the DevTools port on ${PORT}`);
     page = await waitForBrowser(20);
     if (!page) return { ok: false, error: 'browser did not open a debuggable page' };
   }
