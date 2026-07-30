@@ -14,16 +14,45 @@ const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Woboo/1.0';
 // Domains that never repay the fetch: aggregators, walled gardens, link farms.
 const SKIP = /(pinterest|quora|facebook|instagram|tiktok|twitter|x\.com|reddit\.com\/r\/\w+\/comments|youtube|amazon\.|ebay\.)/i;
 
-// A rough sense of who to believe, used to order what gets read first. Not a
-// truth oracle — just the ordering a researcher would apply without thinking.
-function authority(url) {
-  if (/\.(gov|int)(\/|$)/.test(url) || /iucn|unesco|worldbank|who\.int/i.test(url)) return 5;
-  if (/\.edu(\/|$)|\.ac\.[a-z]{2}(\/|$)/.test(url)) return 4;
-  if (/nature\.com|science\.org|springer|wiley|jstor|ncbi\.nlm|pnas\.org|cell\.com/i.test(url)) return 5;
-  if (/wikipedia\.org/i.test(url)) return 3;
-  if (/nationalgeographic|britannica|smithsonian|bbc\.|reuters|nytimes|worldwildlife|wwf\./i.test(url)) return 4;
-  if (/\.org(\/|$)/.test(url)) return 3;
-  return 2;
+// Pages that exist to sell you something. A safari lodge writes about elephants
+// and lands a .org, but it is marketing copy — and a researcher who cited a
+// hotel would be laughed at. Rejected outright rather than ranked low, because
+// a bad source read is a bad source quoted.
+const COMMERCIAL =
+  /(lodge|safari|resort|hotel|tour|travel|holiday|booking|shop|store|sanctuary-visit|adopt|donate-now|zoo-?tickets|elephantsands|elephant-world|tripadvisor|expedia|getyourguide|viator)/i;
+
+// Content farms and SEO chaff: pages assembled from other pages, with no author,
+// no citations and nothing original.
+const FARM =
+  /(animalcorner|biologydictionary|factsking|funfacts|a-z-animals|kidzone|softschools|studocu|coursehero|scribd|slideshare|wikihow|answers\.com|byjus|vedantu|toppr|geeksforgeeks|academicpath|elephanttag|seethewild|nexuswild)/i;
+
+// A rough sense of who to believe, used to order what gets read first — and, at
+// zero, to refuse it. Not a truth oracle, just the ordering a researcher applies
+// without thinking about it.
+export function authority(url) {
+  const host = (() => {
+    try {
+      return new URL(url).hostname.replace(/^www\./, '');
+    } catch {
+      return url;
+    }
+  })();
+
+  if (COMMERCIAL.test(host) || FARM.test(host)) return 0;
+
+  // Primary and peer-reviewed.
+  if (/nature\.com|science\.org|sciencedirect|springer|wiley|jstor|ncbi\.nlm|pubmed|pnas\.org|cell\.com|plos|biorxiv|royalsocietypublishing|frontiersin/i.test(host)) return 6;
+  if (/\.(gov|int)$|\.gov\.|iucnredlist|iucn\.org|unesco|un\.org|who\.int|worldbank|fao\.org|cites\.org/i.test(host)) return 6;
+  if (/\.edu$|\.ac\.[a-z]{2}$|\.edu\./.test(host)) return 5;
+
+  // Serious institutions and reference works.
+  if (/ourworldindata|britannica|smithsonian|nhm\.ac|amnh\.org|si\.edu|zsl\.org|wcs\.org|worldwildlife|wwf\.|panda\.org|savetheelephants|elephantvoices/i.test(host)) return 5;
+  if (/nationalgeographic|bbc\.|reuters|apnews|nytimes|guardian|economist|scientificamerican|newscientist/i.test(host)) return 4;
+  if (/wikipedia\.org/i.test(host)) return 3;
+
+  // An unknown .org is not evidence of anything on its own.
+  if (/\.org$/.test(host)) return 2;
+  return 1;
 }
 
 export async function search(query, { limit = 8 } = {}) {
@@ -40,8 +69,12 @@ export async function search(query, { limit = 8 } = {}) {
       const host = new URL(link).hostname.replace(/^www\./, '');
       // One page per site: ten pages from one domain is not several sources.
       if (seen.has(host)) continue;
+      const rank = authority(link);
+      // Zero means marketing or a content farm. Not worth reading, so not worth
+      // returning — a low rank would still get read once better sources fail.
+      if (rank === 0) continue;
       seen.add(host);
-      hits.push({ url: link, host, authority: authority(link), query });
+      hits.push({ url: link, host, authority: rank, query });
       if (hits.length >= limit) break;
     }
     return hits;

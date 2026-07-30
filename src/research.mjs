@@ -28,8 +28,15 @@ the question rather than rephrasing it five times: for "research elephants" that
 means biology, social behaviour, range, population figures, threats — not
 "elephants", "about elephants", "elephant info".
 
-Prefer queries that will surface primary or authoritative material: statistics,
-official status, research findings.`;
+Write queries that surface PRIMARY sources, not blog summaries of them. A plain
+topic query returns tourism pages and content farms. Aim at the organisations
+and documents that hold the actual data:
+  - name the body that publishes it: "IUCN Red List African elephant assessment",
+    "CITES elephant trade report", "Our World in Data elephant population"
+  - ask for the artefact: "peer reviewed study", "census", "dataset", "PDF report"
+  - use site: when you know where it lives — site:iucnredlist.org, site:nature.com
+  - include a year for anything that changes: "2024 population estimate"
+A query that would return a listicle is a wasted query.`;
 
 const GAP_SCHEMA = {
   type: 'object',
