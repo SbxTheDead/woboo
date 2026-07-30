@@ -12,7 +12,11 @@
 
 import http from 'node:http';
 import fs from 'node:fs';
+import path from 'node:path';
 import crypto from 'node:crypto';
+import { fileURLToPath } from 'node:url';
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
 
 import { PATHS, loadSettings, saveSettings, ownerKey } from './config.mjs';
 import { subscribe } from './bus.mjs';
@@ -101,6 +105,23 @@ async function route(req, res, url) {
 
   if (method === 'GET' && (pathname === '/' || pathname === '/index.html')) {
     return send(res, 200, page({ key: ownerKey() }), { 'content-type': 'text/html; charset=utf-8' });
+  }
+
+  // The brand assets. A fixed whitelist rather than a static directory: this
+  // server can reach anything the owner can, so it serves exactly four files.
+  if (method === 'GET' && pathname.startsWith('/assets/')) {
+    const TYPES = { '.png': 'image/png', '.svg': 'image/svg+xml', '.jpg': 'image/jpeg' };
+    const name = pathname.slice('/assets/'.length);
+    if (!['wobo.png', 'logo.svg', 'logo.png', 'desk.jpg'].includes(name)) {
+      return send(res, 404, { error: 'unknown asset' });
+    }
+    const file = path.join(HERE, '..', 'assets', name);
+    if (!fs.existsSync(file)) return send(res, 404, { error: 'asset missing' });
+    res.writeHead(200, {
+      'content-type': TYPES[path.extname(name)] || 'application/octet-stream',
+      'cache-control': 'public, max-age=86400',
+    });
+    return res.end(fs.readFileSync(file));
   }
 
   if (method === 'GET' && pathname === '/api/state') {
@@ -262,7 +283,12 @@ export function createServer() {
       return send(res, 400, { error: 'unparseable URL' });
     }
 
-    if (!authorized(req, url)) {
+    // Brand art is the one thing not behind the key: it is four fixed images
+    // with nothing private in them, and exempting them keeps stylesheets free
+    // of credentials. Everything that reads state or acts still needs the key.
+    const publicAsset = req.method === 'GET' && url.pathname.startsWith('/assets/');
+
+    if (!publicAsset && !authorized(req, url)) {
       return send(res, 401, { error: 'owner key required — start Woboo with `wobo up` and use the printed URL' });
     }
 

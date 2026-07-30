@@ -43,38 +43,35 @@
   }
   .card > * { position: relative; z-index: 1; }
 
+  /* The launcher shows the character itself — the same render the site leads
+     with — rather than a CSS approximation of it. It bobs, and the antenna
+     bulb pulses in the state colour over the top. */
   .head {
-    position: relative; width: 132px; height: 108px; flex: none;
-    border-radius: 62px 62px 42px 42px;
-    background: radial-gradient(85% 60% at 32% 12%, #FFFDF9 0%, transparent 60%), linear-gradient(168deg, #F3EBE0 0%, #EBE1D4 58%, #E4D8C8 100%);
-    box-shadow: inset 0 2px 3px rgba(255,255,255,.9), inset 0 -6px 12px rgba(160,132,110,.28), 0 14px 28px rgba(0,0,0,.5), 0 0 40px -10px var(--fc);
-    transition: box-shadow .6s ease;
+    position: relative; width: 150px; height: 150px; flex: none;
+    animation: bob 6s ease-in-out infinite;
   }
+  .head img { width: 100%; height: 100%; object-fit: contain;
+    filter: drop-shadow(0 24px 34px rgba(0,0,0,.62)); }
+  @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-9px); } }
+
+  /* The warm halo the character sits in on the site. */
   .head::before {
-    content: ''; position: absolute; inset: 0; border-radius: 62px 62px 42px 42px;
-    border: none; opacity: 0; transition: border-color .6s ease;
+    content: ''; position: absolute; left: 50%; top: 56%; transform: translate(-50%, -50%);
+    width: 150%; aspect-ratio: 1; border-radius: 50%; z-index: -1;
+    background: radial-gradient(circle, var(--fc), transparent 62%);
+    opacity: .22; filter: blur(12px); transition: background .6s ease;
   }
+  /* The bulb, lit in whatever Woboo is currently feeling. */
   .antenna {
-    position: absolute; top: -22px; left: 50%; transform: translateX(-50%);
-    width: 8px; height: 23px; background: repeating-linear-gradient(155deg,#E4D8C8 0 2px, rgba(0,0,0,.12) 2px 4px); border-radius: 4px;
+    position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+    width: 15px; height: 15px; border-radius: 50%; pointer-events: none;
+    background: radial-gradient(circle at 36% 32%, #FFF1DC, var(--fc) 52%, #FF6B3D 100%);
+    box-shadow: 0 0 18px var(--fc), 0 0 40px -6px #FF6B3D;
+    animation: breathe 2.4s ease-in-out infinite; mix-blend-mode: screen;
   }
-  .antenna::after {
-    content: ''; position: absolute; top: -9px; left: 50%; transform: translateX(-50%);
-    width: 11px; height: 11px; border-radius: 50%;
-    background: radial-gradient(circle at 35% 30%, #FFE7C4, var(--fc) 55%, #FF6B3D 100%); box-shadow: 0 0 14px var(--fc), 0 0 30px -6px #FF6B3D;
-    animation: breathe 2.4s ease-in-out infinite;
-  }
-  @keyframes breathe { 0%,100% { opacity:.3 } 50% { opacity:1 } }
-  .screen {
-    position: absolute; left: 14px; right: 14px; top: 14px; height: 70px; border-radius: 38px / 34px; overflow: hidden;
-    background: radial-gradient(120% 95% at 50% 6%, #241C18 0%, #100B09 60%, #080505 100%);
-    box-shadow: 0 0 0 5px #FF6B3D, inset 0 3px 8px rgba(0,0,0,.9);
-  }
-  .screen::after {
-    content: ''; position: absolute; inset: 0; pointer-events: none;
-    background: repeating-linear-gradient(to bottom, rgba(255,255,255,.035) 0 1px, transparent 1px 3px);
-  }
-  #face { position: absolute; inset: 0; width: 100%; height: 100%; }
+  @keyframes breathe { 0%,100% { opacity:.45 } 50% { opacity:1 } }
+  .screen { display: none; }
+  #face { display: none; }
 
   .brand {
     margin-top: 16px; font-size: 20px; font-weight: 700;
@@ -112,8 +109,8 @@
 
 <div class="card">
   <div class="head" id="head">
+    <img src="../assets/wobo.png" alt="Woboo">
     <div class="antenna"></div>
-    <div class="screen"><svg id="face" viewBox="0 0 240 160" preserveAspectRatio="xMidYMid meet"></svg></div>
   </div>
 
   <div class="brand">WOBOO</div>

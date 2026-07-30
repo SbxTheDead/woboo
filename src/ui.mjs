@@ -94,48 +94,33 @@ export function page({ key }) {
   /* The same chassis the desktop companion wears, so the console and the widget
      are recognisably one character rather than two skins. */
   .crt {
-    position: relative; padding: 13px; border-radius: 30px;
-    background: linear-gradient(158deg, #1A1512 0%, #0D0A09 62%, #08080B 100%);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, .06),
-      0 0 0 1px rgba(0, 0, 0, .6),
-      0 14px 34px rgba(0, 0, 0, .5),
-      0 0 40px -12px var(--fc);
-    transition: box-shadow .5s ease;
+    position: relative; aspect-ratio: 1; width: 100%;
+    background: url('/assets/wobo.png') center/contain no-repeat;
+    animation: bob 6s ease-in-out infinite;
   }
-  .crt::before {
-    content: ''; position: absolute; inset: 0; border-radius: 30px; pointer-events: none;
-    border: 1px solid var(--fc); opacity: .45; transition: border-color .5s ease;
-  }
-  .antenna {
-    position: absolute; top: -9px; left: 50%; transform: translateX(-50%);
-    width: 3px; height: 9px; border-radius: 2px;
-    background: linear-gradient(#E4D8C8, rgba(0,0,0,.2));
-  }
-  .antenna::after {
-    content: ''; position: absolute; top: -5px; left: 50%; transform: translateX(-50%);
-    width: 6px; height: 6px; border-radius: 50%;
-    background: var(--fc); box-shadow: 0 0 9px var(--fc);
-    animation: breathe 3.2s ease-in-out infinite;
-  }
-  @keyframes breathe { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+  @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
 
-  .glass {
-    position: relative; border-radius: 20px; overflow: hidden;
-    background: radial-gradient(115% 90% at 50% 0%, #241C18 0%, #080505 100%);
+  /* The warm halo the character sits in on the site. */
+  .crt::before {
+    content: ''; position: absolute; left: 50%; top: 52%; transform: translate(-50%, -50%);
+    width: 120%; aspect-ratio: 1; border-radius: 50%; z-index: -1;
+    background: radial-gradient(circle, var(--fc), transparent 62%);
+    opacity: .2; filter: blur(14px); transition: background .5s ease;
   }
-  /* Scanlines, so the face reads as a screen on a machine rather than a logo. */
-  .glass::after {
-    content: ''; position: absolute; inset: 0; pointer-events: none;
-    background: repeating-linear-gradient(to bottom, rgba(255,255,255,.035) 0 1px, transparent 1px 3px);
+  /* The bulb, lit in whatever Woboo is currently feeling. */
+  .antenna {
+    position: absolute; top: 12.5%; left: 50%; transform: translateX(-50%);
+    width: 8.5%; aspect-ratio: 1; border-radius: 50%; pointer-events: none;
+    background: radial-gradient(circle at 36% 32%, #FFF1DC, var(--fc) 52%, #FF6B3D 100%);
+    box-shadow: 0 0 16px var(--fc), 0 0 36px -6px #FF6B3D;
+    animation: breathe 3.2s ease-in-out infinite; mix-blend-mode: screen;
   }
-  .vent {
-    position: absolute; top: 42%; width: 3px; height: 26px;
-    border-radius: 2px; background: #2A211C;
-  }
-  .vent.l { left: 4px; }
-  .vent.r { right: 4px; }
-  #face { display: block; width: 100%; height: auto; }
+  @keyframes breathe { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
+
+  /* The dark glass on the render's own face, where the live dots are drawn. */
+  .glass { position: absolute; left: 34%; top: 34%; width: 32%; height: 19%; }
+  .vent { display: none; }
+  #face { display: block; width: 100%; height: 100%; }
 ${FACE_CSS}
   .state-line { text-align: center; }
   .state-line b { color: var(--fc); text-transform: uppercase; letter-spacing: 2px; }
