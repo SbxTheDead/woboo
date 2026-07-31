@@ -27,6 +27,11 @@ const COMMERCIAL =
 const FARM =
   /(animalcorner|biologydictionary|factsking|funfacts|a-z-animals|kidzone|softschools|studocu|coursehero|scribd|slideshare|wikihow|answers\.com|byjus|vedantu|toppr|geeksforgeeks|academicpath|elephanttag|seethewild|nexuswild)/i;
 
+// A name list can only ever block the farms someone has already met. These are
+// the shapes: "top10anything", "best-x-reviews", "x-facts-2024". Kept narrow on
+// purpose — it has to reject listicles without catching bestpractices.org.
+const FARM_SHAPE = /(^|[.-])(top-?\d+|\d+best|best[a-z-]{0,12}(reviews?|picks?)|[a-z-]*listicle)/i;
+
 // A rough sense of who to believe, used to order what gets read first — and, at
 // zero, to refuse it. Not a truth oracle, just the ordering a researcher applies
 // without thinking about it.
@@ -39,7 +44,7 @@ export function authority(url) {
     }
   })();
 
-  if (COMMERCIAL.test(host) || FARM.test(host)) return 0;
+  if (COMMERCIAL.test(host) || FARM.test(host) || FARM_SHAPE.test(host)) return 0;
 
   // Primary and peer-reviewed.
   if (/nature\.com|science\.org|sciencedirect|springer|wiley|jstor|ncbi\.nlm|pubmed|pnas\.org|cell\.com|plos|biorxiv|royalsocietypublishing|frontiersin/i.test(host)) return 6;
@@ -222,14 +227,46 @@ export function keywords(question) {
 // best ones in their original order so the prose still reads in sequence.
 export function selectPassages(text, question, { budget = 14_000 } = {}) {
   const terms = keywords(question);
+
+  // Paragraphs first, then sentences for any paragraph too big to be a block.
+  //
+  // Splitting only on blank lines assumed every page has them, and plenty do
+  // not — a stripped article often arrives as one continuous run of text. That
+  // became a single 14,000-character block, which never fit the budget, so it
+  // was skipped and the function returned nothing at all. The source had been
+  // fetched, ranked and paid for, and then read as empty, silently.
+  const MAX_BLOCK = 1400;
+  const pieces = [];
+  for (const para of text.split(/\n\s*\n/)) {
+    if (para.length <= MAX_BLOCK) {
+      pieces.push(para);
+      continue;
+    }
+    let sentence = '';
+    for (const part of para.split(/(?<=[.!?])\s+/)) {
+      if ((sentence + part).length > MAX_BLOCK && sentence) {
+        pieces.push(sentence.trim());
+        sentence = '';
+      }
+      // A single sentence longer than a block is rare and still has to go
+      // somewhere; hard-split it rather than drop it.
+      if (part.length > MAX_BLOCK) {
+        for (let i = 0; i < part.length; i += MAX_BLOCK) pieces.push(part.slice(i, i + MAX_BLOCK));
+        continue;
+      }
+      sentence += `${part} `;
+    }
+    if (sentence.trim()) pieces.push(sentence.trim());
+  }
+
   const blocks = [];
   let current = '';
-  for (const para of text.split(/\n\s*\n/)) {
-    if ((current + para).length > 1400 && current) {
+  for (const piece of pieces) {
+    if ((current + piece).length > MAX_BLOCK && current) {
       blocks.push(current.trim());
       current = '';
     }
-    current += `${para}\n\n`;
+    current += `${piece}\n\n`;
   }
   if (current.trim()) blocks.push(current.trim());
 
@@ -252,11 +289,31 @@ export function selectPassages(text, question, { budget = 14_000 } = {}) {
   let used = 0;
   for (const item of [...scored].sort((a, b) => b.score - a.score)) {
     if (item.score <= 0) break;
-    if (used + item.block.length > budget) continue;
+    if (used + item.block.length > budget) {
+      // The best passage on the page can be larger than the whole budget, and
+      // skipping it left the reader with the second-best — or, when every block
+      // was oversized, with nothing. Trim it to fit rather than discard it; half
+      // of the right passage beats all of the wrong one.
+      const room = budget - used;
+      if (!chosen.length && room > 200) {
+        chosen.push({ ...item, block: item.block.slice(0, room) });
+        used = budget;
+      }
+      continue;
+    }
     chosen.push(item);
     used += item.block.length;
   }
   chosen.sort((a, b) => a.index - b.index);
+
+  // A page that matched nothing is still a page. Returning empty here means the
+  // scribe writes as though the source did not exist, which is how a report ends
+  // up citing one site out of eight — so hand back the opening instead and say
+  // that is what happened.
+  if (!chosen.length && text.trim()) {
+    const head = text.trim().slice(0, budget);
+    return { text: head, kept: 0, of: blocks.length, chars: head.length, fallback: true };
+  }
 
   return {
     text: chosen.map((c) => c.block).join('\n\n'),

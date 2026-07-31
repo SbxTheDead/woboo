@@ -84,6 +84,10 @@ function releaseLock() {
   }
 }
 
+// Exposed for the tests, which is worth the small ugliness: every case they
+// cover is one that silently breaks Telegram rather than throwing.
+export const __lock = { holdLock, lockHolder, releaseLock };
+
 function esc(text) {
   return String(text ?? '').replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
 }

@@ -86,6 +86,11 @@ export const NATIVE = /\b(notepad|explorer|file explorer|settings|control panel|
 // A browser is a browser whatever the site — anything with a URL is DOM work.
 const WEB_ISH = /\b(https?:\/\/|www\.|\.com|\.org|\.net|\.io|browser|chrome|edge|firefox|website|web ?page|online|search (for|the web))\b/i;
 
+// Language about the machine itself rather than about the world. These are the
+// tasks a browser genuinely cannot do, so they are worth the slow rung.
+const DESKTOP_ISH =
+  /\b(desktop|start menu|taskbar|system tray|wallpaper|screenshot|screen|window|dialog|installer|install .*\.exe|my (files|folder|drive)|this pc|recycle bin|device manager|printer|bluetooth|wi-?fi settings)\b/i;
+
 export function identify(goal) {
   const text = String(goal || '');
   for (const [key, app] of Object.entries(APPS)) {
@@ -120,7 +125,18 @@ export function route(goal) {
   if (WEB_ISH.test(goal)) {
     return { rung: 'dom', url: null, why: 'this happens in a browser' };
   }
-  return { rung: 'vision', why: 'nothing recognised, so fall back to looking at the screen' };
+  if (DESKTOP_ISH.test(goal)) {
+    return { rung: 'vision', why: 'this is about the desktop itself, which only eyes can see' };
+  }
+  // Everything else goes to the browser.
+  //
+  // This used to fall back to vision, which meant "find the cheapest flight to
+  // Lisbon" — an obvious browser task that simply named no known site — took the
+  // 153-second-per-step road instead of the 16-millisecond one. Vision is the
+  // most expensive thing Woboo can do and it is now chosen only on a positive
+  // signal that it is needed, never by default. A browser is where most tasks
+  // live, and if the browser turns out to be wrong the foreman can still escalate.
+  return { rung: 'dom', url: null, why: 'nothing named a local app, so try the browser before the screen' };
 }
 
 // What the planner is told, so it routes tasks the same way rather than

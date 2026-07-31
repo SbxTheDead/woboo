@@ -119,7 +119,13 @@ const FORBIDDEN = [
   [/\b(shutdown|Restart-Computer|Stop-Computer|reboot)\b/i, 'power control'],
   [/\bgit\s+push\b[^\n]*--force/i, 'force push'],
   [/\bgit\s+reset\b[^\n]*--hard/i, 'hard reset'],
-  [/\b(curl|wget|iwr|Invoke-WebRequest)\b[^\n]*\|\s*(sh|bash|iex|Invoke-Expression)/i, 'pipe-to-shell'],
+  // Download-and-run, in all the spellings people actually use. `irm ... | iex`
+  // is the canonical PowerShell one-liner and was missing, so it came through as
+  // a merely-unfamiliar command the owner could wave past.
+  [/\b(curl|wget|iwr|irm|Invoke-WebRequest|Invoke-RestMethod)\b[^\n]*\|\s*(sh|bash|iex|Invoke-Expression)/i, 'pipe-to-shell'],
+  // Running a string as code, whatever built it. There is no task that needs
+  // this and every injection attempt wants it.
+  [/(^|[\s;|(])(iex|Invoke-Expression)\b/i, 'executing a string as code'],
   [/\breg\s+(add|delete)\b/i, 'registry write'],
   [/\bnetsh\b/i, 'network reconfiguration'],
   [/\b(takeown|icacls|chmod\s+777)\b/i, 'permission change'],
