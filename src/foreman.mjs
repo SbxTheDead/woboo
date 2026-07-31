@@ -282,6 +282,23 @@ export function unescapePaths(command) {
   );
 }
 
+// The file that was actually produced, when the plan named one that was not.
+//
+// A step that writes a document names it after its own content — a research
+// step wrote internship-opportunities-in-china-for-rayane-sbaac.pdf — while the
+// plan, written before any of it existed, guessed internships.pdf. Three
+// separate places now need the same answer: reading a file, sending one, and
+// checking one. Guessing is the planner's job; knowing is this function's.
+export function orArtifact(named, produced = artifacts) {
+  if (!named || fs.existsSync(named)) return named;
+  const wanted = path.extname(named).toLowerCase();
+  const made = produced.filter((f) => path.extname(f).toLowerCase() === wanted && fs.existsSync(f));
+  if (!made.length) return named;
+  const chosen = made[made.length - 1];
+  record('step', `using ${path.basename(chosen)} — the file an earlier step actually produced`, { level: 'warn' });
+  return chosen;
+}
+
 // The command inside the explanation, if the model wrapped one in prose.
 //
 // A repair came back as "Use a properly escaped single-quoted string with
@@ -421,7 +438,13 @@ async function runStep(i, { cwd, member, task }) {
       const [from, to] = String(instruction)
         .split('->')
         .map((s) => s.trim().replace(/^['"]|['"]$/g, ''));
-      const source = path.resolve(cwd, (from.match(/[^\s'"]+\.\w{2,5}/) || [from])[0]);
+      let source = path.resolve(cwd, (from.match(/[^\s'"]+\.\w{2,5}/) || [from])[0]);
+
+      // Read what an earlier step actually produced, not the name the plan
+      // guessed. The research step wrote
+      // internship-opportunities-in-china-for-rayane-sbaac.pdf; this step was
+      // told to read internships.pdf, which nothing had ever created.
+      source = orArtifact(source);
       try {
         const text = await research.readLocal(source);
         if (!text || text.length < 20) {
@@ -445,22 +468,8 @@ async function runStep(i, { cwd, member, task }) {
       // Hand the finished thing to the owner. One API call, with a token that
       // has been on disk the whole time.
       const named = String(instruction).match(/([-\w./\\: ]+\.(?:pdf|html?|txt|md|png|jpe?g|csv|docx?|zip))/i)?.[1];
-      let file = named ? path.resolve(cwd, named.trim()) : null;
-
       // Send what was actually produced, not what the plan guessed would be.
-      //
-      // A research step names its document after the topic it researched, so
-      // the planner's guess at the filename is nearly always wrong — it wanted
-      // cloud_engineer_guide.pdf and the step had written
-      // how-to-become-a-cloud-engineer-skills-certificatio.pdf. The right file
-      // was on disk the whole time.
-      const madeHere = artifacts.filter((f) => !named || path.extname(f) === path.extname(file || ''));
-      if ((!file || !fs.existsSync(file)) && madeHere.length) {
-        file = madeHere[madeHere.length - 1];
-        record('step', `sending ${path.basename(file)}, which is what the earlier step actually produced`, {
-          level: 'warn',
-        });
-      }
+      let file = named ? orArtifact(path.resolve(cwd, named.trim())) : artifacts[artifacts.length - 1] || null;
 
       if (!file) {
         work = { ok: false, out: `no file named in this step and no earlier step produced one: "${instruction}"` };
@@ -536,7 +545,10 @@ async function runStep(i, { cwd, member, task }) {
     // not find the file, or a compose step with no material, is not being
     // pessimistic — it is reporting a fact, and running a check afterwards only
     // replaces a clear reason with a vaguer one.
-    const DEFINITIVE = new Set(['deliver', 'compose', 'research', 'web']);
+    // A "read" belongs here too: a file that is not on disk will not be on disk
+    // the second and third time either, and running the identical step three
+    // times produced three identical ENOENTs and a step reported as unprovable.
+    const DEFINITIVE = new Set(['deliver', 'compose', 'research', 'web', 'read']);
     if (!work.ok && (DEFINITIVE.has(step.kind) || !step.verify)) {
       setStep(i, { status: 'failed', ms: Date.now() - started });
       return false;
