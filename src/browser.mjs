@@ -94,6 +94,10 @@ export async function open({ fresh = false } = {}) {
         '--no-first-run',
         '--no-default-browser-check',
         '--start-maximized',
+        // A fresh profile has no locale, so sites guess from the IP address and
+        // serve whatever language that suggests. Google came back in German and
+        // the model spent six steps clicking "Suche".
+        '--lang=en-US',
         fresh ? '--incognito' : '',
         'about:blank',
       ].filter(Boolean),

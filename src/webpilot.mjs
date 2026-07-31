@@ -21,24 +21,36 @@ const ACTION_SCHEMA = {
     thought: { type: 'string', description: 'One short sentence on why this is the next move.' },
     action: {
       type: 'string',
-      enum: ['goto', 'click', 'type', 'submit', 'scroll', 'read', 'done', 'stuck'],
+      enum: ['search', 'goto', 'click', 'type', 'submit', 'scroll', 'read', 'done', 'stuck'],
       description:
+        'search = put a query straight to a search engine, no interface to operate; ' +
         'goto = navigate to a url; click/type/submit = act on an element by index; ' +
         'scroll = move down the page; read = the answer is in the page text; ' +
         'done = the goal is met; stuck = it cannot be done and you should say why.',
     },
     index: { type: 'integer', description: 'Which element, from the list. -1 when not acting on one.' },
-    text: { type: 'string', description: 'Text to type, the url for goto, or the reason for done/stuck.' },
+    text: {
+      type: 'string',
+      description: 'The query for search, the url for goto, text to type, or the reason for done/stuck.',
+    },
   },
   required: ['thought', 'action', 'index', 'text'],
   additionalProperties: false,
 };
+
+// Actions that act on a numbered element. If the model does not name a real one,
+// there is nothing to do and pretending otherwise produces a misleading error.
+const NEEDS_ELEMENT = new Set(['click', 'type']);
 
 const SYSTEM = `You are operating a real web browser for Woboo's owner.
 
 Each turn you are given the page's URL, title, its visible text, and a numbered
 list of everything interactive on it. Choose ONE next action.
 
+- To search for something, use "search" with the query. Never navigate to a
+  search engine's home page and operate it: that is a consent dialog, a
+  JavaScript form and often the wrong language, and it wastes every step you
+  spend on it. "search" lands you straight on the results.
 - Act on elements by their number. They are real elements, so a click lands
   exactly on the thing you named — you never have to guess at a position.
 - Elements marked "below" are further down the page. You can still click them;
@@ -199,9 +211,38 @@ export async function browse({ goal, url = null, maxSteps = 14, ask, onProgress 
       return { ok: true, out: decision.text || text.slice(0, 2000), steps: step, url: page.url, text };
     }
 
+    // An action that needs an element and does not name a valid one used to be
+    // sent through as index -1, which failed with "element -1 is no longer on
+    // the page" — a message that reads like the page changed when in fact
+    // nothing was ever chosen. Say what actually happened, and let the model
+    // pick again on the next turn rather than burning the step.
+    if (NEEDS_ELEMENT.has(decision.action)) {
+      const chosen = page.elements[decision.index];
+      if (!chosen) {
+        history.push(`${step}. ${decision.action} failed — no element ${decision.index} on the page`);
+        record('web', `${decision.action} named element ${decision.index}, which is not on the page`, {
+          level: 'warn',
+        });
+        continue;
+      }
+    }
+
     switch (decision.action) {
       case 'goto':
         await browser.goto(decision.text);
+        break;
+      // Searching, without driving a search engine's user interface.
+      //
+      // Asked to search, the model went to google.com and tried to operate it:
+      // find the box, type, find the button, click it. That page is a consent
+      // dialog, a JS-driven form and — because Woboo's profile has no locale —
+      // whatever language the IP address suggests. It spent six steps clicking
+      // "Suche" and never reached a result.
+      //
+      // A results URL is one navigation and no interface at all. It is also what
+      // anyone who uses a computer all day actually does.
+      case 'search':
+        await browser.goto(`https://duckduckgo.com/?q=${encodeURIComponent(decision.text || '')}&kl=us-en`);
         break;
       case 'click':
         await browser.click(decision.index);
