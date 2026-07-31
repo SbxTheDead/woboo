@@ -416,12 +416,32 @@ if (!app.requestSingleInstanceLock()) {
 
     const secrets = loadSecrets();
     if (secrets.telegramToken) {
-      try {
-        const bot = await telegram.start({ token: secrets.telegramToken });
-        bootStep('phone reachable', `@${bot.username}`);
-      } catch (err) {
-        bootStep('telegram failed', err.message.slice(0, 40), 'warn');
-      }
+      // Keep trying, and say so somewhere it can still be read afterwards.
+      //
+      // This gave up after a single attempt and reported the failure only on
+      // the splash screen, which is gone two seconds later. One refused
+      // connection at boot — the wifi not quite up — meant no phone control for
+      // the whole session, with nothing in the journal to explain it. What the
+      // owner saw was "the telegram bot dont work now" and no way to find out
+      // why.
+      const connect = async () => {
+        for (let attempt = 1; attempt <= 20; attempt += 1) {
+          try {
+            const bot = await telegram.start({ token: secrets.telegramToken });
+            if (attempt > 1) record('telegram', `connected on attempt ${attempt}`, { level: 'ok' });
+            bootStep('phone reachable', `@${bot.username}`);
+            return;
+          } catch (err) {
+            record('telegram', `could not start (attempt ${attempt}): ${err.message}`, { level: 'warn' });
+            if (attempt === 1) bootStep('phone not up yet', 'retrying in the background', 'warn');
+            await new Promise((r) => setTimeout(r, Math.min(60_000, attempt * 5000)));
+          }
+        }
+        record('telegram', 'gave up starting the bot after 20 attempts', { level: 'error' });
+      };
+      // Deliberately not awaited: a bot that cannot connect must not hold up
+      // the desktop, and this used to block the rest of the boot.
+      connect();
     } else {
       bootStep('phone not linked', 'wobo secret telegram', 'warn');
     }

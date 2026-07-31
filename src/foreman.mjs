@@ -513,7 +513,27 @@ async function runStep(i, { cwd, member, task }) {
       return true;
     }
 
-    const check = await run(asExitCode(unescapePaths(step.verify)), { cwd, label: `verify ${step.title}` });
+    // Check the file that was made, not the one the plan guessed at.
+    //
+    // A research step names its document after the topic it researched. The
+    // verify was written against a guessed name, so it failed, so the whole
+    // step ran again — three complete research runs, twelve minutes, three
+    // perfectly good PDFs rendered and thrown away, because the check was
+    // looking at a path nothing had ever written.
+    let verifyCommand = unescapePaths(step.verify);
+    if (work.file && fs.existsSync(work.file)) {
+      verifyCommand = verifyCommand.replace(/'([^']*\.[a-z0-9]{2,5})'/gi, (whole, named) => {
+        const guessed = path.resolve(cwd, named);
+        if (fs.existsSync(guessed)) return whole;
+        if (path.extname(guessed).toLowerCase() !== path.extname(work.file).toLowerCase()) return whole;
+        record('step', `checking ${path.basename(work.file)} — the file this step actually produced`, {
+          level: 'warn',
+        });
+        return `'${work.file}'`;
+      });
+    }
+
+    const check = await run(asExitCode(verifyCommand), { cwd, label: `verify ${step.title}` });
     setStep(i, { verifyOutput: check.out });
 
     if (check.ok) {

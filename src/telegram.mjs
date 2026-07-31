@@ -217,7 +217,22 @@ export async function start({ token, onPairCode } = {}) {
 
   const bot = createBot({ token });
 
-  const me = await bot.call('getMe');
+  // The first call touches the network, and at boot the network is the least
+  // reliable it will be all session — the machine may have only just woken up.
+  // A refused connection here used to mean no phone control until a restart.
+  let me;
+  let lastError;
+  for (let attempt = 1; attempt <= 4; attempt += 1) {
+    try {
+      me = await bot.call('getMe', {}, { timeout: 12_000 });
+      break;
+    } catch (err) {
+      lastError = err;
+      record('telegram', `getMe failed (${err.message}); retry ${attempt}/4`, { level: 'warn' });
+      await new Promise((r) => setTimeout(r, attempt * 2000));
+    }
+  }
+  if (!me) throw lastError || new Error('could not reach Telegram');
   if (!me.ok) throw new Error(`Telegram rejected the token: ${me.description || 'unknown error'}`);
   record('telegram', `connected as @${me.result.username}`, { level: 'ok' });
 
