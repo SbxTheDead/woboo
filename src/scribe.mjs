@@ -11,6 +11,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { pdfToText as readPdf } from './pdf.mjs';
 import { record } from './journal.mjs';
 
 // Source pages are megabytes of markup; models want the words. Deliberately
@@ -51,9 +52,16 @@ export function gather(workspace, patterns) {
         ? fs.readdirSync(full).map((f) => path.join(full, f))
         : [full];
       for (const file of files) {
-        if (!/\.(html?|txt|md|json)$/i.test(file)) continue;
-        const raw = fs.readFileSync(file, 'utf8');
-        const text = /\.html?$/i.test(file) ? htmlToText(raw) : raw;
+        // PDFs count. Skipping them meant a task pointing at a résumé or a
+        // report had its one real source silently ignored — and the planner
+        // resorted to shelling out to Python to read it, which failed on
+        // quoting, on a missing package, and on a path, three attempts running.
+        if (!/\.(html?|txt|md|json|pdf)$/i.test(file)) continue;
+        const text = /\.pdf$/i.test(file)
+          ? readPdf(fs.readFileSync(file))
+          : /\.html?$/i.test(file)
+            ? htmlToText(fs.readFileSync(file, 'utf8'))
+            : fs.readFileSync(file, 'utf8');
         if (text.length < 200) continue;
         sources.push({ file, text: text.slice(0, PER_SOURCE), full: text.length });
       }

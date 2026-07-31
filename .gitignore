@@ -1,5 +1,4 @@
 node_modules/
-package-lock.json
 *.log
 
 # Wobo's runtime state normally lives in ~/.wobo, but never commit a stray copy:
@@ -29,3 +28,8 @@ invest_research/
 # Documents Woboo writes land in the workspace root; source HTML lives in desktop/.
 /*.html
 /*.pdf
+
+# Scratch space for mission output.
+tmp/
+internship_output/
+*_output/

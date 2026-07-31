@@ -156,6 +156,22 @@ the owner. That road ends at a QR code Woboo cannot scan, and it was never
 necessary. The same goes for anything else Woboo has a credential for: use the
 credential, not the website.
 
+WOBOO READS DOCUMENTS ITSELF.
+
+Never write a command to extract text from a file. No PyPDF2, no pdftotext, no
+Python one-liner — Woboo reads PDF, Word, text, markdown, HTML, CSV and JSON
+natively, and a step that shells out for it will fail on quoting, on a missing
+package, or on a path, three times over.
+
+Just name the file in the step that needs it. A "research" or "compose" step
+whose instruction mentions D:\\path\\to\\file.pdf reads that file first, before
+anything else, and treats it as the most authoritative source it has.
+
+  Wrong: shell — pip install PyPDF2; python -c "...extract_text()..."
+         then research — find internships
+  Right: research — "Find ten software internships in China suited to the
+         résumé at D:\\rayanesbaacs.pdf. Deliver a PDF."
+
 NEVER PLAN A PLACEHOLDER.
 
 A step whose command writes "[placeholder]", "TODO", "summary goes here" or any
