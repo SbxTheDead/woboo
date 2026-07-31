@@ -12,6 +12,7 @@
 
 import fs from 'node:fs';
 import crypto from 'node:crypto';
+import https from 'node:https';
 import { loadSettings, saveSettings } from './config.mjs';
 import { subscribe } from './bus.mjs';
 import { record, tail } from './journal.mjs';
@@ -28,22 +29,47 @@ function esc(text) {
   return String(text ?? '').replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
 }
 
-export function createBot({ token }) {
-  const call = async (method, body, { timeout = 30_000 } = {}) => {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeout);
-    try {
-      const response = await fetch(`${API}/bot${token}/${method}`, {
+// Node's HTTP stack, deliberately, not fetch.
+//
+// Inside Electron's main process `fetch` is Chromium's implementation, and it
+// will not hold Telegram's long-polling connection open — every getUpdates came
+// back "fetch failed" while the identical call from plain Node returned in a
+// second. Messages piled up unread and the bot looked dead. node:https is the
+// same in both hosts, so the bot behaves identically however Woboo is started.
+function request(url, payload, timeout) {
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify(payload || {});
+    const req = https.request(
+      url,
+      {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body || {}),
-        signal: controller.signal,
-      });
-      return await response.json();
-    } finally {
-      clearTimeout(timer);
-    }
-  };
+        headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body) },
+        timeout,
+      },
+      (res) => {
+        let text = '';
+        res.setEncoding('utf8');
+        res.on('data', (chunk) => {
+          text += chunk;
+        });
+        res.on('end', () => {
+          try {
+            resolve(JSON.parse(text));
+          } catch {
+            reject(new Error(`Telegram returned unparseable JSON (${res.statusCode})`));
+          }
+        });
+      },
+    );
+    req.on('timeout', () => req.destroy(new Error('timed out')));
+    req.on('error', reject);
+    req.end(body);
+  });
+}
+
+export function createBot({ token }) {
+  const call = (method, body, { timeout = 30_000 } = {}) =>
+    request(`${API}/bot${token}/${method}`, body, timeout);
 
   const send = (chatId, text, extra = {}) =>
     call('sendMessage', {
