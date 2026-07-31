@@ -326,6 +326,20 @@ async function runStep(i, { cwd, member, task }) {
       if (seen.length > 40) {
         findings.push({ file: `${step.title} (read from the web)`, text: seen });
       }
+    } else if (step.kind === 'deliver') {
+      // Hand the finished thing to the owner. One API call, with a token that
+      // has been on disk the whole time.
+      const named = String(instruction).match(/([-\w./\\: ]+\.(?:pdf|html?|txt|md|png|jpe?g|csv|docx?|zip))/i)?.[1];
+      const file = named ? path.resolve(cwd, named.trim()) : null;
+      if (!file) {
+        work = { ok: false, out: `no file named in this step, so there is nothing to send: "${instruction}"` };
+      } else {
+        const telegram = await import('./telegram.mjs');
+        const sent = await telegram.deliver(file, mission.summary || '');
+        work = sent.ok
+          ? { ok: true, out: `sent ${path.basename(file)} to you on Telegram` }
+          : { ok: false, out: `could not send ${path.basename(file)}: ${sent.error}` };
+      }
     } else if (step.kind === 'compose') {
       // The step that turns gathered material into something worth reading.
       const named = String(instruction).match(/(?:^|[\s:'"(])([.\w][-\w./\\]*\.(?:html?|txt|md|json))\b/gi) || [];

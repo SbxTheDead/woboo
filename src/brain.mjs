@@ -74,13 +74,14 @@ const PLAN_SCHEMA = {
           title: { type: 'string', description: 'Short imperative label, under 60 chars.' },
           kind: {
             type: 'string',
-            enum: ['research', 'web', 'delegate', 'shell', 'compose', 'computer', 'inspect'],
+            enum: ['research', 'web', 'delegate', 'shell', 'compose', 'computer', 'inspect', 'deliver'],
             description:
               'research = search the web, read sources, write a cited report and render it to PDF, all in one step; ' +
               'web = drive a real browser through the DOM: click real elements, fill forms, read pages; ' +
               'delegate = hand a spec to the installed coding tool; shell = run a command directly; ' +
               'compose = read local files and WRITE a document from them; ' +
-              'computer = drive the mouse and keyboard on screen like a person; inspect = look at the screen.',
+              'computer = drive the mouse and keyboard on screen like a person; inspect = look at the screen; ' +
+              'deliver = send a finished file to the owner on Telegram (instruction is just the file path).',
           },
           instruction: {
             type: 'string',
@@ -142,6 +143,18 @@ shape of the sentence — from what the person meant.
 Then plan the steps that produce exactly those deliverables, in an order where
 each has what it needs from the one before. Every step exists to serve a
 deliverable; if a step serves none, drop it.
+
+SENDING SOMETHING TO THE OWNER IS NOT A BROWSER ERRAND.
+
+Woboo already holds a Telegram bot token and a paired chat with its owner. To
+give them a file — a PDF, a report, a screenshot — use a "deliver" step whose
+instruction is the file path. That is one API call with credentials already on
+disk.
+
+Never plan to open web.telegram.org, or any other messenger's website, to reach
+the owner. That road ends at a QR code Woboo cannot scan, and it was never
+necessary. The same goes for anything else Woboo has a credential for: use the
+credential, not the website.
 
 NEVER PLAN A PLACEHOLDER.
 

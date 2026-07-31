@@ -171,7 +171,42 @@ export function createBot({ token }) {
     return response.json();
   };
 
-  return { call, send, sendPhoto };
+  const sendDocument = async (chatId, filePath, caption) => {
+    const form = new FormData();
+    form.append('chat_id', String(chatId));
+    if (caption) form.append('caption', caption.slice(0, 1000));
+    form.append('document', new Blob([fs.readFileSync(filePath)]), path.basename(filePath));
+    const response = await fetch(`${API}/bot${token}/sendDocument`, { method: 'POST', body: form });
+    return response.json();
+  };
+
+  return { call, send, sendPhoto, sendDocument };
+}
+
+// Hand a finished file to the owner, wherever they are.
+//
+// Woboo holds a bot token and a paired chat, and was still opening
+// web.telegram.org in a browser and stopping at a QR code it could never scan.
+// Sending a file to its own owner is not a browser errand: it is one API call
+// with credentials that are already on disk.
+export async function deliver(filePath, caption = '') {
+  const token = loadSecrets().telegramToken || process.env.WOBO_TELEGRAM_TOKEN;
+  const chatId = loadSettings().telegramChatId;
+  if (!token) return { ok: false, error: 'no Telegram token stored' };
+  if (!chatId) return { ok: false, error: 'no paired chat — send /pair from your phone first' };
+  if (!fs.existsSync(filePath)) return { ok: false, error: `${filePath} does not exist` };
+
+  const bot = createBot({ token });
+  const isImage = /\.(png|jpe?g|gif|webp)$/i.test(filePath);
+  const result = await (isImage
+    ? bot.sendPhoto(chatId, filePath, caption)
+    : bot.sendDocument(chatId, filePath, caption));
+
+  const ok = Boolean(result?.ok);
+  record('telegram', ok ? `sent ${path.basename(filePath)} to the owner` : `could not send: ${result?.description}`, {
+    level: ok ? 'ok' : 'error',
+  });
+  return ok ? { ok: true, file: filePath } : { ok: false, error: result?.description || 'Telegram refused the file' };
 }
 
 // ── the loop ──────────────────────────────────────────────────────────────────
