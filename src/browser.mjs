@@ -18,7 +18,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { PATHS } from './config.mjs';
+import { PATHS, loadSettings } from './config.mjs';
 import { record } from './journal.mjs';
 import { assertLive } from './guard.mjs';
 import { browserPath } from './toolbox.mjs';
@@ -160,6 +160,27 @@ export async function open({ fresh = false } = {}) {
     }
     if (message.method === 'Runtime.executionContextsCleared') contexts.clear();
 
+    // A native dialog freezes everything.
+    //
+    // alert(), confirm() and beforeunload block the renderer completely: no
+    // script runs, no input is delivered, and every CDP call sits there until it
+    // times out. Gmail throws one — "Your draft has been modified. Abandon
+    // changes?" — and the whole mission died on "Input.dispatchMouseEvent timed
+    // out", with no clue on screen unless someone happened to be watching the
+    // window.
+    //
+    // Answer it, always, and answer NO. Woboo is never the one who should agree
+    // to abandon the owner's work; a dialog asking to discard something is
+    // exactly the thing to decline. Any prompt that genuinely needs a yes is the
+    // owner's to give.
+    if (message.method === 'Page.javascriptDialogOpening') {
+      const { type, message: text } = message.params;
+      record('browser', `page asked "${String(text).slice(0, 80)}" — declining`, { level: 'warn' });
+      // beforeunload is the one that must be accepted: refusing it leaves the
+      // page wedged on a navigation that can never complete.
+      send('Page.handleJavaScriptDialog', { accept: type === 'beforeunload' }).catch(() => {});
+    }
+
     const waiter = pending.get(message.id);
     if (!waiter) return;
     pending.delete(message.id);
@@ -201,6 +222,44 @@ async function evaluate(expression, contextId = null) {
   return result.result?.value;
 }
 
+// Move the owner's real cursor to where Woboo is about to click.
+//
+// The click itself goes through the DevTools protocol, because that is the
+// reliable way to hit an element by identity rather than by a coordinate that
+// might be wrong. But a click nobody can see does not look like a machine being
+// used — "why don't I see it using my mouse" is a fair complaint about an agent
+// whose entire promise is being a body.
+//
+// So the pointer travels to the element first, visibly, and the click lands
+// where the pointer is. If moving it fails, or the owner has turned it off, the
+// click still happens: this is presentation, not mechanism.
+let screenOffset = null;
+
+async function showPointer(viewportX, viewportY) {
+  // Off unless asked for. Moving the owner's real pointer looked like the
+  // answer to "why can't I see it working" and was not: the cursor wandered to
+  // places that did not match where the click actually went, which reads as a
+  // machine flailing rather than one working. The click itself is precise —
+  // this was only ever decoration, and wrong decoration is worse than none.
+  if (loadSettings().visibleCursor !== true) return;
+  try {
+    if (!screenOffset) {
+      // Where the page's top-left sits on the actual screen. Read once per
+      // attach; a moved window is corrected on the next one.
+      const box = await evaluate(
+        `({ x: window.screenX + (window.outerWidth - window.innerWidth),
+            y: window.screenY + (window.outerHeight - window.innerHeight) })`,
+      );
+      if (!box || typeof box.x !== 'number') return;
+      screenOffset = box;
+    }
+    const hands = await import('./hands.mjs');
+    await hands.showCursor(screenOffset.x + viewportX, screenOffset.y + viewportY);
+  } catch {
+    // A cursor that will not move is not a reason to fail a click.
+  }
+}
+
 // Bring the window forward, and keep the page treated as visible.
 //
 // A Chrome window behind everything else is marked hidden, and Chrome then
@@ -235,6 +294,7 @@ export function close() {
   pending.clear();
   contexts.clear();
   elementFrames = [];
+  screenOffset = null;
 }
 
 // ── what is on the page ───────────────────────────────────────────────────────
@@ -344,6 +404,21 @@ const COLLECT = (startIndex = 0) => `((START) => {
 })(${Number(startIndex)})`;
 
 export async function snapshot() {
+  // A page with nothing interactive on it is almost never a finished page.
+  //
+  // Gmail's compose window takes a few seconds to draw, and the first look
+  // found zero elements — so the model saw an empty page, guessed it was a
+  // login screen, and gave up on a window that appeared a second later. Look
+  // again before believing it.
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const page = await readAllFrames();
+    if (page.elements.length || attempt === 3) return page;
+    await new Promise((r) => setTimeout(r, 1200));
+  }
+  return readAllFrames();
+}
+
+async function readAllFrames() {
   assertLive('browser');
 
   // Read every frame, not just the top one. They are numbered in one sequence
@@ -477,6 +552,9 @@ export async function click(index) {
       world,
     );
   } else {
+    // Let the owner watch the pointer go there.
+    await showPointer(spot.x, spot.y);
+
     // `buttons` is the bitmask of what is held down, and it is not optional:
     // without it Chrome delivers a press that many handlers quietly ignore.
     const at = { x: spot.x, y: spot.y, button: 'left', clickCount: 1 };
@@ -511,7 +589,27 @@ export async function type(index, text) {
   // Input.insertText goes through the browser's own input pipeline, so the page
   // cannot tell it from a person and every widget handles it: React inputs,
   // contenteditable, and the chip-style recipient fields mail clients use.
+  //
+  // It delivers to whatever the *browser* considers focused, though, and
+  // el.focus() inside an iframe focuses within that frame without giving the
+  // frame itself focus. In Gmail — where every field is in a frame — the
+  // address, the subject and the body all went into the To field, one after
+  // another, because focus never actually moved.
+  //
+  // Clicking the field first was the obvious fix and the wrong one: it put
+  // stray clicks on a live inbox and selected fifty conversations. DOM.focus is
+  // the right tool — it sets focus at the browser level, in the correct frame,
+  // touching nothing else.
   const world = frameOf(index);
+  const handle = await send('Runtime.evaluate', {
+    expression: `document.querySelector('[data-woboo="${Number(index)}"]')`,
+    ...(world === null ? {} : { contextId: world }),
+  }).catch(() => null);
+  if (handle?.result?.objectId) {
+    await send('DOM.focus', { objectId: handle.result.objectId }).catch(() => {});
+    await send('Runtime.releaseObject', { objectId: handle.result.objectId }).catch(() => {});
+  }
+
   const focused = await evaluate(
     `(() => {
     const el = document.querySelector('[data-woboo="${Number(index)}"]');
@@ -543,12 +641,23 @@ export async function type(index, text) {
   // Confirm rather than assume. A field that silently rejected the text is the
   // exact failure this replaced, and reporting success on it wastes three more
   // steps before the loop-breaker notices.
+  const wanted = JSON.stringify(String(text).slice(0, 60));
   const result = await evaluate(
     `(() => {
     const el = document.querySelector('[data-woboo="${Number(index)}"]');
     if (!el) return { ok: true, landed: '' };
     const now = el.isContentEditable ? (el.innerText || '') : String(el.value ?? '');
-    return { ok: now.length > 0, landed: now.slice(0, 60) };
+    if (now.length) return { ok: true, landed: now.slice(0, 60) };
+
+    // An empty field is not proof the text was rejected. A chip field — mail
+    // recipients, tag pickers — swallows what you type and shows it as a block
+    // beside the input, leaving the input itself blank. Reading only the input
+    // reported failure on the one case that had actually worked, so the model
+    // typed the address again, and again, into a field that kept accepting it.
+    const box = el.closest('[role=dialog], form, [role=main]') || document.body;
+    const near = (box.innerText || '');
+    if (near.includes(${wanted})) return { ok: true, landed: ${wanted}, chip: true };
+    return { ok: false, landed: '' };
   })()`,
     world,
   );

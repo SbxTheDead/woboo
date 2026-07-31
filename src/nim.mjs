@@ -23,6 +23,10 @@ import { record } from './journal.mjs';
 
 const BASE = 'https://integrate.api.nvidia.com/v1';
 
+// Statuses that mean "try again", not "give up". A shared free tier produces all
+// of these routinely and none of them is a reason to abandon a mission.
+const RETRYABLE = new Set([429, 500, 502, 503, 504]);
+
 // Picked from the live catalogue for planning work. The default is a
 // mixture-of-experts model: 120B total but only ~12B active per token, so it is
 // quick and cheap on a free allowance while still reasoning properly.
@@ -161,7 +165,12 @@ async function ask({ system, prompt, schema, name, maxTokens = 8000, think = tru
   // A free allowance shares workers, so "all 32 busy" is routine rather than
   // broken — two missions starting together is enough to hit it. Wait and try
   // again instead of throwing the plan away over a queue that clears in seconds.
-  for (let attempt = 1; attempt <= 4 && (response.status === 503 || response.status === 429); attempt += 1) {
+  //
+  // 500 belongs here too. NIM returns "Failed to parse chat completion
+  // response" now and then, entirely at its end, and it used to end the mission:
+  // one bad response from a shared free tier and everything the owner asked for
+  // was abandoned mid-step.
+  for (let attempt = 1; attempt <= 4 && RETRYABLE.has(response.status); attempt += 1) {
     const wait = attempt * 4000;
     record('brain', `NIM busy (${response.status}); retrying in ${wait / 1000}s`, { level: 'warn' });
     await new Promise((resolve) => setTimeout(resolve, wait));
@@ -176,6 +185,23 @@ async function ask({ system, prompt, schema, name, maxTokens = 8000, think = tru
   const payload = await response.json();
   const choice = payload.choices?.[0];
   if (!choice) throw new Error('NIM returned no choices');
+
+  // Sometimes the model simply comes apart — a thousand <unk> tokens where the
+  // answer should be. It is a decoding failure at their end, not a bad request,
+  // and it used to end the mission: everything the owner asked for abandoned
+  // because one sampled response was garbage. Ask once more.
+  const raw = choice.message?.content || '';
+  if (/(<unk>){8,}|(�){8,}/.test(raw)) {
+    record('brain', 'NIM returned garbage tokens; asking again', { level: 'warn' });
+    const retry = await post();
+    if (retry.ok) {
+      const second = await retry.json();
+      const text = second.choices?.[0]?.message?.content || '';
+      if (text && !/(<unk>){8,}/.test(text)) {
+        return { data: extractJson(text), usage: second.usage, model: second.model };
+      }
+    }
+  }
   // Reasoning models put the answer in `content` and their thinking elsewhere;
   // either way `content` is what we want.
   const data = extractJson(choice.message?.content);
@@ -212,9 +238,9 @@ export async function write({ system, prompt, maxTokens = 16_000 }) {
     });
 
   let response = await post();
-  for (let attempt = 1; attempt <= 4 && (response.status === 503 || response.status === 429); attempt += 1) {
+  for (let attempt = 1; attempt <= 4 && RETRYABLE.has(response.status); attempt += 1) {
     const wait = attempt * 4000;
-    record('brain', `NIM busy (${response.status}); retrying in ${wait / 1000}s`, { level: 'warn' });
+    record('brain', `NIM ${response.status}; retrying in ${wait / 1000}s`, { level: 'warn' });
     await new Promise((resolve) => setTimeout(resolve, wait));
     response = await post();
   }

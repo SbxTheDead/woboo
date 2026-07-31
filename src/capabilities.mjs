@@ -26,16 +26,30 @@ export const APPS = {
   gmail: {
     name: 'Gmail',
     match: /\b(gmail|google mail|my email|send an? email)\b/i,
-    // Straight to a compose window. Clicking the Compose button is unreliable —
-    // it is a div in a framework that does not always act on a dispatched
-    // click — and this URL opens the same window every time.
-    web: 'https://mail.google.com/mail/u/0/#inbox?compose=new',
+    // Gmail's compose deep link, which fills the hard fields for us.
+    //
+    // Driving the inbox compose window does not work and the reasons are all
+    // Gmail's: the Compose button is a div that ignores a dispatched click, the
+    // window is buried in iframes, and the recipient box is an autocomplete
+    // widget that takes focus back the moment anything else is typed — so the
+    // address, the subject and the body all ended up concatenated in the To
+    // field, three separate times.
+    //
+    // This URL opens a standalone compose window with the recipient already a
+    // committed chip and the subject already set. Twenty-eight elements instead
+    // of three hundred, nothing to click, and nothing to fight for focus. Only
+    // the body is typed, and that works.
+    web: 'https://mail.google.com/mail/u/0/?view=cm&fs=1',
     api: { name: 'Gmail API', base: 'https://gmail.googleapis.com/gmail/v1', secret: 'googleOAuth' },
     hint:
-      'To write an email, go straight to https://mail.google.com/mail/u/0/#inbox?compose=new — that opens the ' +
-      'compose window without clicking anything. Fill "To recipients", then "Subject", then "Message Body". ' +
-      'After typing an address, SUBMIT that field to turn it into a chip: Gmail throws away an address that was ' +
-      'never committed, so the mail would send to nobody. "Send" is the blue button at the bottom.',
+      'To write an email, navigate to ' +
+      'https://mail.google.com/mail/u/0/?view=cm&fs=1&to=RECIPIENT&su=SUBJECT with the recipient and subject ' +
+      'url-encoded into the address. That opens a compose window with both already filled in, so there is no ' +
+      'Compose button to click and no recipient field to fight. Then type the message into "Message Body" — ' +
+      'that is the only field to fill. Do NOT try to type the recipient or subject by hand: Gmail\'s recipient ' +
+      'box steals focus and everything you type lands in it. "Send" is the blue button at the bottom. ' +
+      'Gmail saves drafts by itself, so if the task says to leave a draft, just finish — never click ' +
+      '"Discard draft", which throws the message away.',
   },
   outlook: {
     name: 'Outlook',

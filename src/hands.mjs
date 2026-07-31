@@ -3,7 +3,7 @@
 // asking the owner every single time (settings.hands = 'ask').
 
 import { loadSettings } from './config.mjs';
-import { assertLive, requestApproval, onStop, Refused } from './guard.mjs';
+import { assertLive, requestApproval, onStop, isStopped, Refused } from './guard.mjs';
 import { script, isWindows } from './ps.mjs';
 import { record } from './journal.mjs';
 
@@ -335,6 +335,28 @@ Write-Output scrolled`,
   );
   record('hands', `scrolled ${direction} x${clicks}`, { level: result.ok ? 'ok' : 'error' });
   return { ok: result.ok, out: result.out };
+}
+
+// Move the pointer without asking.
+//
+// Every other thing in this file does something to the machine, so every other
+// thing asks. Moving the cursor does not: nothing is clicked, nothing is typed,
+// nothing changes. It exists so the owner can watch where Woboo is working
+// while the click itself goes through the browser protocol.
+//
+// Asking for that would mean an approval prompt per click, which is how a
+// useful feature becomes an unusable one. STOP and hands:"off" are still
+// honoured — a halt means a halt.
+export async function showCursor(x, y) {
+  if (isStopped() || loadSettings().hands === 'off') return { ok: false };
+  if (!isWindows()) return { ok: false };
+  const source = `
+$ErrorActionPreference = 'Stop'
+${MOUSE_SHIM}
+[WoboMouse]::SetCursorPos(${Number(x) | 0}, ${Number(y) | 0})
+`;
+  const result = await script(source, { action: 'show pointer', quiet: true }).catch(() => ({ ok: false }));
+  return { ok: Boolean(result.ok) };
 }
 
 export async function moveTo(x, y) {

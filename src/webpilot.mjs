@@ -60,6 +60,17 @@ list of everything interactive on it. Choose ONE next action.
   anything that shows what you typed as a little block — needs "submit" straight
   after the "type", or the application discards it when focus moves on. An email
   addressed to nobody looks exactly like a success until it is sent.
+- Never click anything that throws work away — "Discard", "Delete", "Don't save"
+  — unless the goal asked for it.
+- You do not need to close, save or tidy anything at the end. A mail client
+  saves its draft the moment you stop typing; a form keeps what you entered.
+  When the fields hold what the goal asked for, the goal is met: use "done" and
+  say what you filled in. Do not hunt for a close button, and never use "stuck"
+  because you could not find one — "stuck" is for being blocked, not finished.
+- A field that turns entries into chips or tags — mail recipients, label pickers,
+  anything that shows what you typed as a little block — needs "submit" straight
+  after the "type", or the application discards it when focus moves on. An email
+  addressed to nobody looks exactly like a success until it is sent.
 - When the page already answers the goal, use "read": the text you were given is
   what a person would see, so quote from it rather than clicking further.
 - Use "done" the moment the goal is met, with a plain summary in text.
@@ -231,7 +242,9 @@ export async function browse({ goal, url = null, maxSteps = 14, ask, onProgress 
       }
     }
 
-    switch (decision.action) {
+    let outcome = null;
+    try {
+      switch (decision.action) {
       case 'goto':
         await browser.goto(decision.text);
         break;
@@ -249,21 +262,43 @@ export async function browse({ goal, url = null, maxSteps = 14, ask, onProgress 
         await browser.goto(`https://duckduckgo.com/?q=${encodeURIComponent(decision.text || '')}&kl=us-en`);
         break;
       case 'click':
-        await browser.click(decision.index);
+        outcome = await browser.click(decision.index);
         break;
       case 'type':
-        await browser.type(decision.index, decision.text);
+        outcome = await browser.type(decision.index, decision.text);
         break;
       case 'submit':
-        await browser.pressEnter(decision.index);
+        outcome = await browser.pressEnter(decision.index);
         break;
       case 'scroll':
         await browser.scroll(700);
         break;
       default:
         break;
+      }
+    } catch (err) {
+      // One action going wrong is one action, not the end of the errand. A CDP
+      // call times out when the page navigates underneath it or a popup closes
+      // mid-click, and that used to throw straight out of the loop — failing a
+      // mission whose fields had all been filled correctly a second earlier.
+      outcome = { ok: false, error: err.message };
+      record('web', `${decision.action} failed: ${err.message}`, { level: 'warn' });
     }
-    history.push(`${step}. ${decision.action} ${label || decision.text || ''}`.slice(0, 110));
+
+    // Say when an action failed, in the history the model reads.
+    //
+    // A failed action used to be recorded exactly like a successful one, so the
+    // next turn read "2. type To recipients" and concluded the field was
+    // filled. It went on to the subject, the body, and "done" — reporting a
+    // finished email that had never been written.
+    history.push(
+      outcome && outcome.ok === false
+        ? `${step}. ${decision.action} ${label || decision.text || ''} — FAILED: ${outcome.error || 'no effect'}`.slice(
+            0,
+            140,
+          )
+        : `${step}. ${decision.action} ${label || decision.text || ''}`.slice(0, 110),
+    );
   }
 
   return { ok: false, out: `gave up after ${maxSteps} steps without finishing: ${goal}` };
