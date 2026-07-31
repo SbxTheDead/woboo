@@ -222,6 +222,24 @@ reporting back. Plan for that shape:
     "Research African and Asian elephants: biology, social structure, range,
      population figures and conservation status. Deliver a PDF."
   Leave its "verify" empty — the step checks its own work with an editor pass.
+  NEVER give a research step a verify that names a file: it writes a PDF whose
+  name comes from the topic, so a check for internships.txt or report.pdf can
+  never pass, and the step will be repeated at great cost to answer a question
+  that has no right answer.
+- "research" WRITES A DOCUMENT. It does not collect a list.
+  Asked for "ten internships in China with contact emails", it will produce a
+  well-cited essay about internships in China and not one email address, three
+  times over, because that is the only thing it knows how to make.
+  Gathering specific items — job openings, products, prices, contacts, listings
+  — is "web" work: go to the site that lists them, read the entries, open the
+  promising ones, collect the fields. Say the number wanted in the instruction.
+    Wrong: research — "find 10 internships in China with emails"
+    Right: web — "On a Chinese job board, find 10 software internships in
+           Beijing or Shanghai. For each collect title, company, city, the
+           application link and a contact email if shown. Do not stop until
+           you have 10."
+  Use "research" when the deliverable is a document that explains something.
+  Use "web" when the deliverable is a set of facts someone will act on.
 - Use "compose" only to write from files that are ALREADY on disk. If the
   material still has to be found, that is "research".
 - A "web" step is ONE step for the whole browser errand, not one per click. It

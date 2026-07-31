@@ -593,6 +593,26 @@ async function runStep(i, { cwd, member, task }) {
       });
     }
 
+    // A check looking for something this step does not make is a broken plan,
+    // not a failed step.
+    //
+    // A research step writes a cited PDF. This one was checked with "does
+    // internships.txt exist and have ten lines" — which could never pass, so
+    // the step was retried, and retried: three complete research runs,
+    // eighteen minutes, three good PDFs rendered and thrown away, over a check
+    // that was asking about a file nothing in the plan ever writes. Repeating
+    // expensive work cannot fix a question that has no right answer.
+    const wants = (verifyCommand.match(/'[^']*\.(\w{2,5})'/) || [])[1];
+    if (work.file && wants && wants.toLowerCase() !== path.extname(work.file).slice(1).toLowerCase()) {
+      record(
+        'step',
+        `step ${i + 1} produced ${path.basename(work.file)}, but its check asks for a .${wants} — not retrying`,
+        { level: 'error' },
+      );
+      setStep(i, { status: 'failed', ms: Date.now() - started });
+      return false;
+    }
+
     const check = await run(asExitCode(verifyCommand), { cwd, label: `verify ${step.title}` });
     setStep(i, { verifyOutput: check.out });
 
