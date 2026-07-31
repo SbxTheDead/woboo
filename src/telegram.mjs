@@ -13,7 +13,8 @@
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import https from 'node:https';
-import { loadSettings, saveSettings } from './config.mjs';
+import path from 'node:path';
+import { loadSettings, saveSettings, PATHS, ensureHome } from './config.mjs';
 import { subscribe } from './bus.mjs';
 import { record, tail } from './journal.mjs';
 import * as guard from './guard.mjs';
@@ -24,6 +25,64 @@ import * as memory from './memory.mjs';
 
 const API = 'https://api.telegram.org';
 const TEXT_LIMIT = 3900; // Telegram caps at 4096; leave room for formatting.
+
+// Which Woboo owns the phone.
+//
+// Telegram allows one long-polling consumer per bot, so two Woboos on the same
+// machine — the app and a CLI run, or a leftover process — will steal the slot
+// from each other forever and the owner sees a bot that answers one message in
+// three. The lock says who is meant to be polling; anyone else waits.
+//
+// It heartbeats rather than merely existing, because a lock left behind by a
+// process that was killed must not silence Telegram until someone notices a
+// file. Stale by 45 seconds, or held by a pid that is gone, means free.
+const LOCK = path.join(PATHS.home, 'telegram.lock');
+const LOCK_STALE = 45_000;
+
+function lockHolder() {
+  try {
+    const held = JSON.parse(fs.readFileSync(LOCK, 'utf8'));
+    if (!held?.pid || Date.now() - (held.at || 0) > LOCK_STALE) return null;
+    if (held.pid !== process.pid) {
+      try {
+        process.kill(held.pid, 0);
+      } catch (err) {
+        // ESRCH means no such process. EPERM means there very much is one, we
+        // are just not allowed to signal it — treating that as "gone" would
+        // steal the lock from a Woboo running as another user.
+        if (err.code !== 'EPERM') return null;
+      }
+    }
+    return held;
+  } catch {
+    return null;
+  }
+}
+
+// True if this process may poll — either it already holds the lock, or the lock
+// is free and it has just taken it.
+function holdLock() {
+  const held = lockHolder();
+  if (held && held.pid !== process.pid) return false;
+  try {
+    ensureHome();
+    fs.writeFileSync(LOCK, JSON.stringify({ pid: process.pid, at: Date.now() }));
+    return true;
+  } catch {
+    // A lock we cannot write is not a reason to refuse to work.
+    return true;
+  }
+}
+
+function releaseLock() {
+  const held = lockHolder();
+  if (held && held.pid !== process.pid) return;
+  try {
+    fs.unlinkSync(LOCK);
+  } catch {
+    // Already gone.
+  }
+}
 
 function esc(text) {
   return String(text ?? '').replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
@@ -363,6 +422,7 @@ export async function start({ token, onPairCode } = {}) {
   }
 
   const poll = async () => {
+    let conflicts = 0;
     while (alive) {
       try {
         // Telegram holds the request open until something happens or the timeout
@@ -373,22 +433,41 @@ export async function start({ token, onPairCode } = {}) {
           { timeout: 35_000 },
         );
         if (!updates.ok) {
-          // Telegram allows exactly one long-poll consumer per bot. A second
-          // Woboo — the app when the CLI is already running, say — would
-          // otherwise fight the first forever, each stealing the other's
-          // updates. Stand down instead of looping on it.
+          // Telegram allows exactly one long-poll consumer per bot, and hands the
+          // slot to whoever asked most recently. A conflict is therefore normal
+          // and usually momentary: a restart whose previous connection has not
+          // dropped yet, or a `woboo telegram` run alongside the app.
+          //
+          // This used to stand down permanently, which meant one stray poll —
+          // from a test script, from a second window opened for ten seconds —
+          // left the bot deaf until Woboo was restarted, with nothing on screen
+          // to say so. Hold the lock file instead: whoever owns it keeps
+          // retrying and wins the slot back, and anyone who does not own it
+          // waits for the owner to die rather than fighting over it.
           if (/conflict/i.test(updates.description || '')) {
-            record('telegram', 'another Woboo is already polling this bot — standing down', {
-              level: 'warn',
-            });
-            alive = false;
-            unsubscribe();
-            return;
+            conflicts += 1;
+            if (!holdLock()) {
+              // Someone else's lock, and they are alive. Wait for them.
+              if (conflicts === 1) record('telegram', 'another Woboo holds the bot — waiting for it', { level: 'warn' });
+              await new Promise((r) => setTimeout(r, 15_000));
+              continue;
+            }
+            const wait = Math.min(2000 * conflicts, 20_000);
+            if (conflicts <= 2 || conflicts % 10 === 0) {
+              record('telegram', `bot slot busy; reclaiming it (attempt ${conflicts})`, { level: 'warn' });
+            }
+            await new Promise((r) => setTimeout(r, wait));
+            continue;
           }
           record('telegram', `getUpdates failed: ${updates.description}`, { level: 'warn' });
           await new Promise((r) => setTimeout(r, 5000));
           continue;
         }
+        if (conflicts) {
+          record('telegram', 'bot slot reclaimed — listening again', { level: 'ok' });
+          conflicts = 0;
+        }
+        holdLock();
         for (const update of updates.result) {
           offset = update.update_id + 1;
           try {
@@ -410,6 +489,20 @@ export async function start({ token, onPairCode } = {}) {
     }
   };
 
+  // Heartbeat on its own timer rather than inside the loop: a handler that takes
+  // a minute would otherwise let the lock go stale and hand the phone to another
+  // Woboo mid-conversation.
+  holdLock();
+  const heartbeat = setInterval(() => {
+    if (alive) holdLock();
+  }, 15_000);
+  if (typeof heartbeat.unref === 'function') heartbeat.unref();
+
+  // Dying without dropping the lock leaves the next Woboo waiting 45 seconds for
+  // a heartbeat that will never come.
+  const drop = () => releaseLock();
+  process.once('exit', drop);
+
   poll();
 
   return {
@@ -418,6 +511,9 @@ export async function start({ token, onPairCode } = {}) {
     paired: () => owner,
     stop() {
       alive = false;
+      clearInterval(heartbeat);
+      process.off('exit', drop);
+      releaseLock();
       unsubscribe();
       record('telegram', 'bot stopped');
     },
