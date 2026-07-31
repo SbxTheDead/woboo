@@ -226,75 +226,51 @@ async function cmdBrowser(args, flags) {
   const { browserPath } = await import('./src/toolbox.mjs');
   const { script } = await import('./src/ps.mjs');
 
-  const { listProfiles } = await import('./src/toolbox.mjs');
-
-  // Pick by the name the owner sees in their browser, not a directory called
-  // "Profile 3" that means nothing to anyone.
-  if (args[0] === 'use') {
-    const wanted = args.slice(1).join(' ').trim().toLowerCase();
-    const profiles = listProfiles();
-    const match = profiles.find(
-      (p) => p.name.toLowerCase() === wanted || p.dir.toLowerCase() === wanted || p.email.toLowerCase() === wanted,
-    );
-    if (!match) {
-      say(red(`  no profile called "${args.slice(1).join(' ')}".`));
-      for (const p of profiles) say(dim(`    ${p.name}${p.email ? ` — ${p.email}` : ''}`));
-      return 2;
-    }
-    saveSettings({ browserProfile: 'mine', chromeProfile: match.dir });
-    say(green(`  Woboo will use ${match.name}${match.email ? ` (${match.email})` : ''}`));
-    say(dim('  it acts as that account: its logins, its mail, its sessions.'));
-    return 0;
-  }
-
-  if (args[0] === 'profiles') {
-    const profiles = listProfiles();
-    if (!profiles.length) return say(dim('  no browser profiles found.')) || 0;
-    const chosen = loadSettings().chromeProfile;
-    for (const p of profiles) {
-      const mark = p.dir === chosen ? green(' *') : '  ';
-      say(`${mark} ${p.name.padEnd(16)} ${dim(p.email || '—')} ${p.lastUsed ? dim('(last used)') : ''}`);
-    }
-    say('');
-    say(dim('  woboo browser use "<name>"'));
-    return 0;
-  }
-
-  if (args[0] === 'mine' || args[0] === 'own') {
-    const next = saveSettings({ browserProfile: args[0] });
-    say(green(`  browser profile = ${next.browserProfile}`));
-    say(
-      dim(
-        next.browserProfile === 'mine'
-          ? '  Woboo will act as you: your logins, your sessions, your history.'
-          : '  Woboo gets its own blank profile — safe, but signed in to nothing.',
-      ),
-    );
-    return 0;
-  }
-
   const exe = browserPath();
   const which = exe && /chrome\.exe$/i.test(exe) ? 'Chrome' : 'Edge';
 
+  // Woboo drives a browser profile of its own — Chrome refuses a debugging port
+  // on the real one, and has since Chrome 136, because that is exactly how
+  // session-stealing malware works. So signing in is a one-time thing the owner
+  // does by hand, in Woboo's browser, once per account.
+  if (args[0] === 'signin' || args[0] === 'login') {
+    const where = args[1] || 'https://accounts.google.com';
+    const opened = await browser.open();
+    if (!opened.ok) return say(red(`  ${opened.error}`)) || 1;
+    await browser.goto(where);
+    say(green(`  ${which} is open on ${where}.`));
+    say(dim("  sign in there by hand — it is Woboo's own profile, and it stays signed in."));
+    say(dim('  Woboo never types passwords or one-time codes itself.'));
+    return 0;
+  }
+
+  if (args[0] === 'reset') {
+    await browser.close().catch(() => {});
+    await script(`Remove-Item -LiteralPath '${browser.profileDir()}' -Recurse -Force -ErrorAction SilentlyContinue`, {
+      action: 'reset browser profile',
+      timeout: 30_000,
+    });
+    say(green("  Woboo's browser profile is wiped — every account signed out."));
+    return 0;
+  }
+
   if (flags.restart) {
-    // Chrome allows one process per profile, so the only way to reach the
-    // owner's logged-in profile is to close it and reopen it with the port.
-    // Tabs restore, which is why this is offered rather than merely refused.
-    say(yellow(`  closing ${which} and reopening it with debugging enabled…`));
-    say(dim('  your tabs will restore.'));
+    say(yellow(`  closing Woboo's ${which} and reopening it with debugging enabled…`));
+    await browser.close().catch(() => {});
     await script(
-      `Stop-Process -Name '${which === 'Chrome' ? 'chrome' : 'msedge'}' -Force -ErrorAction SilentlyContinue`,
+      `Get-CimInstance Win32_Process -Filter "Name='${which === 'Chrome' ? 'chrome.exe' : 'msedge.exe'}'" | ` +
+        `Where-Object { $_.CommandLine -like '*${browser.profileDir().replace(/\\/g, '\\')}*' } | ` +
+        `ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`,
       { action: 'close browser', timeout: 20_000 },
     );
-    await new Promise((r) => setTimeout(r, 2500));
+    await new Promise((r) => setTimeout(r, 2000));
     const opened = await browser.open();
     say(opened.ok ? green(`  ${which} is up and Woboo is attached.`) : red(`  ${opened.error}`));
     return opened.ok ? 0 : 1;
   }
 
   say(`  browser   ${cyan(exe || 'none found')}`);
-  const profile = loadSettings().browserProfile;
-  say(`  profile   ${bold(profile)} ${dim(profile === 'mine' ? '(your logins)' : '(blank)')}`);
+  say(`  profile   ${bold(browser.profileDir())}`);
   const state = await browser.open();
   say(`  attached  ${state.ok ? green('yes') : red('no')}`);
   if (!state.ok) {
@@ -302,9 +278,9 @@ async function cmdBrowser(args, flags) {
     say(dim(`  ${state.error}`));
   }
   say('');
-  say(dim('  woboo browser mine       drive your real profile, with your logins'));
-  say(dim('  woboo browser own        drive a blank profile it cannot take anything from'));
-  say(dim('  woboo browser --restart  reopen the browser with debugging enabled'));
+  say(dim('  woboo browser signin [url]  open it so you can sign in to an account'));
+  say(dim('  woboo browser reset         wipe the profile and sign out of everything'));
+  say(dim('  woboo browser --restart     reopen the browser with debugging enabled'));
   return 0;
 }
 

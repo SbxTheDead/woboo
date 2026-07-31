@@ -15,13 +15,13 @@
 // This is the same idea as browser-use, without Python or Playwright: Node has
 // had a WebSocket client built in since v22, so it costs no dependency at all.
 
+import fs from 'node:fs';
+import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { loadSettings, saveSettings } from './config.mjs';
+import { PATHS } from './config.mjs';
 import { record } from './journal.mjs';
 import { assertLive } from './guard.mjs';
-import { exec } from './ps.mjs';
-import * as consult from './consult.mjs';
-import { browserPath, profileRoot, listProfiles } from './toolbox.mjs';
+import { browserPath } from './toolbox.mjs';
 
 const PORT = 9333;
 const HOST = '127.0.0.1';
@@ -30,6 +30,7 @@ let socket = null;
 let nextId = 1;
 const pending = new Map();
 let child = null;
+let loading = 0;
 
 // ── connection ────────────────────────────────────────────────────────────────
 
@@ -52,39 +53,25 @@ async function waitForBrowser(seconds = 20) {
   return null;
 }
 
-// Attach to a browser already running with debugging enabled, or start one.
-// A separate user-data-dir keeps this out of the owner's real profile: their
-// tabs, cookies and logins are not Woboo's to rummage through by default.
-// Woboo's own browser profile, or the owner's real one.
+// Woboo's own browser profile, kept for good.
 //
-// A scratch profile is the safe default: Woboo cannot see the owner's history,
-// cookies or sessions. It is also useless for anything that needs a login —
-// asked to open Gmail it lands on a sign-in page and has no way past it.
+// It cannot be the owner's real Chrome profile, and that is Chrome's decision
+// rather than a limitation here: since Chrome 136, --remote-debugging-port is
+// refused outright when the user-data-dir is the default profile. The reason is
+// sound — it is precisely how malware steals live sessions — and it is not
+// negotiable. Chrome launches, the port never opens, and nothing can attach.
 //
-// Using the real profile is the owner's call, so it is a setting. The catch is
-// Chrome's: a profile can only be open in one process, so if Chrome is already
-// running the flag is ignored and a new window quietly joins the existing
-// process — with no debugging port. That failure is silent, which is worse than
-// loud, so it is detected and explained rather than guessed at.
-function profileArgs() {
-  const settings = loadSettings();
-  if (settings.browserProfile !== 'mine') {
-    return [`--user-data-dir=${process.env.TEMP || '.'}\\woboo-browser`];
-  }
-  // Which of the owner's profiles, named explicitly. Never a default: a person
-  // with three profiles has three inboxes, and guessing means sending mail as
-  // the wrong one.
-  return [`--user-data-dir=${profileRoot()}`, `--profile-directory=${settings.chromeProfile}`];
+// So Woboo keeps a profile of its own, under ~/.woboo rather than TEMP so that
+// signing in survives a reboot. Sign in to Gmail there once and it stays signed
+// in, exactly like a second browser. That is also the safer arrangement: Woboo
+// can only reach the accounts deliberately given to it, not everything the owner
+// happens to be logged into.
+export function profileDir() {
+  return path.join(PATHS.home, 'browser');
 }
 
-// Is a browser of this kind already running? If so its profile is locked and
-// a new launch cannot take the debugging port.
-async function alreadyRunning(exeName) {
-  const result = await exec('tasklist.exe', ['/FI', `IMAGENAME eq ${exeName}`, '/FO', 'CSV'], {
-    timeout: 8000,
-    action: 'check browser',
-  }).catch(() => ({ ok: false, out: '' }));
-  return result.ok && result.out.toLowerCase().includes(exeName.toLowerCase());
+function profileArgs() {
+  return [`--user-data-dir=${profileDir()}`];
 }
 
 export async function open({ fresh = false } = {}) {
@@ -94,87 +81,10 @@ export async function open({ fresh = false } = {}) {
   const exe = browserPath();
   if (!exe) return { ok: false, error: 'no Chrome or Edge found to drive' };
   const which = /chrome\.exe$/i.test(exe) ? 'Chrome' : 'Edge';
-  const exeName = which === 'Chrome' ? 'chrome.exe' : 'msedge.exe';
-  const settings = loadSettings();
-  const wantsReal = settings.browserProfile === 'mine';
-
-  // Decide whose browser this is BEFORE attaching to anything. A debuggable
-  // browser left over from an earlier run will happily accept a connection, and
-  // attaching to it would quietly ignore the profile the owner chose — acting as
-  // the wrong account while reporting success.
-  let profileDir = settings.chromeProfile;
-  if (wantsReal && !profileDir) {
-    const choices = listProfiles();
-    if (!choices.length) {
-      return { ok: false, error: `no ${which} profile found to use` };
-    }
-    if (choices.length === 1) {
-      profileDir = choices[0].dir;
-    } else {
-      // Ask, wherever the owner is — the widget, the console, or their phone —
-      // and keep the answer. Guessing here means acting as the wrong person.
-      profileDir = await consult.ask({
-        key: 'browser.profile',
-        question: `Which ${which} profile should Woboo use?`,
-        detail: 'It will act as that account: its mail, its logins, its sessions.',
-        options: choices.map((p) => ({
-          label: `${p.name}${p.email ? ` — ${p.email}` : ''}`,
-          value: p.dir,
-        })),
-      });
-      if (!profileDir) {
-        return {
-          ok: false,
-          needsProfile: choices,
-          error:
-            `Woboo asked which ${which} profile to use and got no answer. ` +
-            `Choose one with \`woboo browser use "<name>"\`, or answer the question in Telegram.`,
-        };
-      }
-      saveSettings({ chromeProfile: profileDir });
-    }
-  }
-
   // Something already listening on the port is a browser Woboo can drive.
   let page = await waitForBrowser(1);
   if (!page) {
-    if (wantsReal && (await alreadyRunning(exeName))) {
-      // Chrome allows one process per profile, so reaching the owner's
-      // logged-in profile means restarting it. That is their window and their
-      // tabs, so ask — but ask rather than dead-ending, because "I cannot do
-      // this" when a single tap would fix it is a bad answer.
-      const restart = await consult.ask({
-        question: `Restart ${which} so Woboo can use your logged-in profile?`,
-        detail:
-          `${which} only allows one process per profile, and the one running now has no debugging port. ` +
-          `Your tabs will restore.`,
-        options: [
-          { label: `Yes, restart ${which}`, value: 'restart' },
-          { label: 'No, use a blank profile instead', value: 'own' },
-        ],
-        timeout: 180,
-      });
-
-      if (restart === 'own') {
-        saveSettings({ browserProfile: 'own' });
-        record('browser', 'owner chose a blank profile instead of restarting', { level: 'warn' });
-      } else if (restart === 'restart') {
-        record('browser', `restarting ${which} to attach to the owner's profile`, { level: 'warn' });
-        await exec('taskkill.exe', ['/F', '/IM', exeName], { timeout: 15_000, action: 'restart browser' }).catch(
-          () => {},
-        );
-        await new Promise((r) => setTimeout(r, 3000));
-      } else {
-        return {
-          ok: false,
-          needsRestart: which,
-          error:
-            `${which} is already running and Woboo cannot attach to your logged-in profile while it is — ` +
-            `${which} allows one process per profile, and the running one has no debugging port. ` +
-            `Close ${which} and try again, or run \`woboo browser --restart\`.`,
-        };
-      }
-    }
+    fs.mkdirSync(profileDir(), { recursive: true });
 
     child = spawn(
       exe,
@@ -190,7 +100,7 @@ export async function open({ fresh = false } = {}) {
       { detached: true, stdio: 'ignore' },
     );
     child.unref();
-    record('browser', `launched ${which} (${wantsReal ? 'your profile' : "Woboo's own profile"}) on port ${PORT}`);
+    record('browser', `launched ${which} with Woboo's own profile on port ${PORT}`);
     page = await waitForBrowser(20);
     if (!page) return { ok: false, error: 'browser did not open a debuggable page' };
   }
@@ -208,6 +118,14 @@ export async function open({ fresh = false } = {}) {
     } catch {
       return;
     }
+    // Navigation, watched rather than guessed at. Clicking a link or submitting
+    // a search starts a page load, and for a moment afterwards the old page is
+    // still there — fully loaded, unchanged, and completely stale. Reading it
+    // then returns the previous page's contents while reporting success, which
+    // is exactly how a search came back with nothing on it.
+    if (message.method === 'Page.frameStartedLoading') loading += 1;
+    if (message.method === 'Page.frameStoppedLoading') loading = Math.max(0, loading - 1);
+
     const waiter = pending.get(message.id);
     if (!waiter) return;
     pending.delete(message.id);
@@ -373,12 +291,25 @@ export async function type(index, text) {
 
 export async function pressEnter(index) {
   assertLive('browser');
+  // Focus the field first, then send the key through the browser's own input
+  // pipeline rather than dispatching a synthetic event. A page can tell the two
+  // apart — KeyboardEvent.isTrusted is false for the synthetic one — and search
+  // boxes are precisely the kind of thing that checks.
   await evaluate(`(() => {
-    const el = document.querySelector('[data-woboo="${Number(index)}"]') || document.activeElement;
-    if (!el) return;
-    el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
-    el.form?.requestSubmit?.();
+    const el = document.querySelector('[data-woboo="${Number(index)}"]');
+    if (el) el.focus();
   })()`);
+  for (const type of ['keyDown', 'char', 'keyUp']) {
+    await send('Input.dispatchKeyEvent', {
+      type,
+      key: 'Enter',
+      code: 'Enter',
+      windowsVirtualKeyCode: 13,
+      nativeVirtualKeyCode: 13,
+      text: '\r',
+      unmodifiedText: '\r',
+    });
+  }
   await settle();
   return { ok: true };
 }
@@ -432,16 +363,32 @@ export async function watchErrors() {
 }
 
 // Wait for the page to stop changing, rather than sleeping a fixed guess.
-async function settle(timeout = 8000) {
+async function settle(timeout = 12_000) {
   const deadline = Date.now() + timeout;
+
+  // A click or an Enter does not navigate instantly — the page decides, a
+  // fraction of a second later. Give it that fraction before concluding
+  // anything is settled, or the "settled" page is the one we just left.
+  const grace = Date.now() + 900;
+  while (loading === 0 && Date.now() < grace) {
+    await new Promise((r) => setTimeout(r, 60));
+  }
+
   let last = '';
   while (Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, 250));
+    if (loading > 0) {
+      last = '';
+      continue;
+    }
     let now;
     try {
-      now = await evaluate(`document.readyState + ':' + document.querySelectorAll('*').length`);
+      now = await evaluate(
+        `document.readyState + ':' + location.href + ':' + document.querySelectorAll('*').length`,
+      );
     } catch {
       // Mid-navigation the context is torn down; try again.
+      last = '';
       continue;
     }
     if (now === last && String(now).startsWith('complete')) return;
