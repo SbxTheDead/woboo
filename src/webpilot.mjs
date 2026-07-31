@@ -21,11 +21,13 @@ const ACTION_SCHEMA = {
     thought: { type: 'string', description: 'One short sentence on why this is the next move.' },
     action: {
       type: 'string',
-      enum: ['search', 'goto', 'click', 'type', 'submit', 'scroll', 'read', 'done', 'stuck'],
+      enum: ['search', 'goto', 'click', 'type', 'submit', 'scroll', 'read', 'back', 'verify_human', 'done', 'stuck'],
       description:
         'search = put a query straight to a search engine, no interface to operate; ' +
         'goto = navigate to a url; click/type/submit = act on an element by index; ' +
         'scroll = move down the page; read = the answer is in the page text; ' +
+        'back = return to the previous page, for when a link was a dead end; ' +
+        'verify_human = click a "verify you are human" checkbox when one is blocking the page; ' +
         'done = the goal is met; stuck = it cannot be done and you should say why.',
     },
     index: { type: 'integer', description: 'Which element, from the list. -1 when not acting on one.' },
@@ -72,16 +74,44 @@ list of everything interactive on it. Choose ONE next action.
   When the fields hold what the goal asked for, the goal is met: use "done" and
   say what you filled in. Do not hunt for a close button, and never use "stuck"
   because you could not find one — "stuck" is for being blocked, not finished.
-- A field that turns entries into chips or tags — mail recipients, label pickers,
-  anything that shows what you typed as a little block — needs "submit" straight
-  after the "type", or the application discards it when focus moves on. An email
-  addressed to nobody looks exactly like a success until it is sent.
 - When the page already answers the goal, use "read": the text you were given is
   what a person would see, so quote from it rather than clicking further.
-- Use "done" the moment the goal is met, with a plain summary in text.
-- Use "stuck" if the page needs a login you do not have, a payment, a captcha,
-  or anything you should not do on someone's behalf. Say exactly what blocked
-  you. Do not keep clicking hopefully.
+
+FINISH THE JOB, NOT THE FIRST STEP OF IT.
+
+Asked for ten of something, come back with ten. A page of search results is
+where the work starts, not where it ends: the snippets under each link are
+advertising copy, and a list built only from them is a list of guesses.
+
+- If the goal names a number — ten offers, five suppliers, every message from
+  someone — keep a running count and keep going until you have that many. Say
+  the count in your "thought" each turn, so you can see where you are.
+- Open the promising results and read them. One result page read properly is
+  worth ten skimmed snippets, because it is where the real detail lives: the
+  actual title, the actual location, the actual requirements, the link that
+  works.
+- If a source turns out to be thin, dead, or off-topic, go back and try the
+  next one. That is normal, not a failure.
+- Only use "done" when you can state what you actually collected: how many, and
+  from where. If you have three of the ten asked for, you are not done — say so
+  with "stuck" and report the three, rather than presenting them as ten.
+
+- Use "done" the moment the goal is genuinely met, with a plain summary in text.
+- A BLOCKED PAGE IS NOT A BLOCKED GOAL. A captcha, a Cloudflare check, a paywall
+  or a login wall stops that one page, not the errand. Use "back" to return to
+  the results and open the next one. There are always other sources; a person
+  who hit a captcha on the first search result would not abandon the search.
+- If the page is a "Verify you are human" checkbox and nothing else, "verify_human"
+  clicks it — the checkbox is often in a frame you cannot see in the element
+  list, which is why there is a separate action for it. Try it ONCE. These checks
+  also judge how the pointer moved and how fast the page was reached, so it will
+  frequently not pass. When it does not, use "back" and read a different source
+  rather than trying again.
+- Use "stuck" only when the GOAL itself cannot proceed: every route tried and
+  blocked, or the next move is one you should not make on someone's behalf —
+  spending money, sending something the goal did not ask for, entering a
+  credential. Say exactly what blocked you and what you tried. Do not use
+  "stuck" for a single unhelpful page.
 
 Never buy, send, post, delete or confirm anything that the goal did not ask for.
 
@@ -201,7 +231,29 @@ export async function browse({ goal, url = null, maxSteps = 14, ask, onProgress 
     // help. Stop and say what is stuck rather than hammering the field forever.
     const signature = `${decision.action}:${decision.index}:${decision.text?.slice(0, 30) || ''}`;
     recent.push(signature);
-    if (recent.length > 4) recent.shift();
+    if (recent.length > 6) recent.shift();
+
+    // Going back and forth is a loop too.
+    //
+    // This only noticed the same move three times running, so search → goto →
+    // search → goto sailed straight through it: two moves, each undoing the
+    // other, three times over. A cycle is a cycle whatever its length.
+    if (recent.length >= 6) {
+      const [a, b] = recent.slice(-6);
+      const alternating = recent.slice(-6).every((s, n) => s === (n % 2 === 0 ? a : b));
+      if (alternating && a !== b) {
+        setFace('confused', 'going in circles');
+        return {
+          ok: false,
+          out:
+            `Going in circles: alternating between "${a.split(':')[0]}" and "${b.split(':')[0]}" three times over ` +
+            `without the page moving on. Each move is undoing the last one.`,
+          steps: step,
+          url: page.url,
+        };
+      }
+    }
+
     if (recent.length >= 3 && recent.slice(-3).every((s) => s === signature)) {
       setFace('confused', 'stuck in a loop');
       return {
@@ -250,9 +302,22 @@ export async function browse({ goal, url = null, maxSteps = 14, ask, onProgress 
     let outcome = null;
     try {
       switch (decision.action) {
-      case 'goto':
-        await browser.goto(decision.text);
+      // "goto" needs a url. It kept being handed element labels — "Open menu",
+      // "Search domain jooble.org" — which navigated nowhere useful and burned
+      // a step each time. A label is not an address; what the model actually
+      // wanted was to search for those words.
+      case 'goto': {
+        const target = String(decision.text || '').trim();
+        if (/^(https?:\/\/|www\.)|^[\w-]+\.[a-z]{2,}(\/|$)/i.test(target)) {
+          await browser.goto(target);
+        } else if (target) {
+          record('web', `"${target.slice(0, 40)}" is not a url — searching for it instead`, { level: 'warn' });
+          await browser.goto(`https://duckduckgo.com/?q=${encodeURIComponent(target)}&kl=us-en`);
+        } else {
+          outcome = { ok: false, error: 'goto needs a url and was given nothing' };
+        }
         break;
+      }
       // Searching, without driving a search engine's user interface.
       //
       // Asked to search, the model went to google.com and tried to operate it:
@@ -263,9 +328,23 @@ export async function browse({ goal, url = null, maxSteps = 14, ask, onProgress 
       //
       // A results URL is one navigation and no interface at all. It is also what
       // anyone who uses a computer all day actually does.
-      case 'search':
-        await browser.goto(`https://duckduckgo.com/?q=${encodeURIComponent(decision.text || '')}&kl=us-en`);
+      // Use the engine the goal actually named.
+      //
+      // "search" always went to DuckDuckGo. Given a goal that said to use
+      // Google, the model searched, landed on DuckDuckGo, correctly observed
+      // that this was not Google, navigated to Google, searched again — and
+      // went round three times before giving up on the idea. Ninety seconds
+      // spent arguing with its own tool.
+      case 'search': {
+        const query = encodeURIComponent(decision.text || '');
+        const wantsGoogle = /\bgoogle\b/i.test(goal) || /\bgoogle\b/i.test(decision.thought || '');
+        await browser.goto(
+          wantsGoogle
+            ? `https://www.google.com/search?q=${query}&hl=en`
+            : `https://duckduckgo.com/?q=${query}&kl=us-en`,
+        );
         break;
+      }
       case 'click':
         outcome = await browser.click(decision.index);
         break;

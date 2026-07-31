@@ -233,21 +233,41 @@ export async function write({ system, prompt, maxTokens = 16_000 }) {
   const key = apiKey();
   if (!key) throw new Error('no NVIDIA key — run `woboo secret nvidia nvapi-...`');
 
-  const post = () =>
-    fetch(`${BASE}/chat/completions`, {
-      method: 'POST',
-      headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
-      body: JSON.stringify({
-        model: model(),
-        max_tokens: maxTokens,
-        temperature: 0.6,
-        top_p: 0.95,
-        messages: [
-          { role: 'system', content: system },
-          { role: 'user', content: prompt },
-        ],
-      }),
-    });
+  // The same network-fault retry the structured call has had all along.
+  //
+  // Writing did not have it, so a dropped connection mid-document — "fetch
+  // failed", one line, no context — ended a mission that had already done the
+  // searching and the reading. The wifi blinked and an hour of work went with
+  // it.
+  const body = JSON.stringify({
+    model: model(),
+    max_tokens: maxTokens,
+    temperature: 0.6,
+    top_p: 0.95,
+    messages: [
+      { role: 'system', content: system },
+      { role: 'user', content: prompt },
+    ],
+  });
+
+  const post = async () => {
+    let lastError;
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        return await fetch(`${BASE}/chat/completions`, {
+          method: 'POST',
+          headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
+          body,
+          signal: AbortSignal.timeout(120_000),
+        });
+      } catch (err) {
+        lastError = err;
+        record('brain', `network fault while writing (${err.message}); retry ${attempt}/3`, { level: 'warn' });
+        await new Promise((resolve) => setTimeout(resolve, attempt * 3000));
+      }
+    }
+    throw lastError;
+  };
 
   let response = await post();
   for (let attempt = 1; attempt <= 4 && RETRYABLE.has(response.status); attempt += 1) {

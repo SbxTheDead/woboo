@@ -242,6 +242,13 @@ reporting back. Plan for that shape:
   PowerShell, never cmd.exe: use Test-Path, New-Item, $LASTEXITCODE. cmd-isms
   like "if exist X exit 0 else exit 1", %VAR% or 2>NUL are parse errors there and
   fail every single time. Elsewhere, write POSIX sh.
+- Negation in PowerShell is "-not", never "not". \`if not (Test-Path 'x')\` is a
+  parse error — "Missing '(' after 'if'" — and fails every time. Write
+  \`if (-not (Test-Path 'x'))\`, or better \`New-Item -ItemType Directory -Force\`,
+  which needs no test at all.
+- Write paths exactly as you would type them in a terminal, with one separator
+  between folders. Do not double them up to be safe — that produces a path that
+  does not exist.
 - Quote paths with single quotes, not double: 'C:\\some\\path'. These commands
   travel through JSON, and a double quote has to be escaped on the way, which is
   where malformed commands come from. Single quotes need no escaping and are

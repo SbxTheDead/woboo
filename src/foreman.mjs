@@ -232,6 +232,19 @@ export async function runMission(task, { workspace } = {}) {
 const SETS_OWN_EXIT =
   /^\s*(npm|npx|pnpm|yarn|bun|deno|node|git|go|cargo|dotnet|mvn|gradle|python3?|py|pip|pytest|ruff|uv|jest|vitest|tsc|eslint|prettier|make)\b/i;
 
+// Paths that came through JSON with their separators doubled.
+//
+// The planner emitted `Test-Path 'D:\\wobo\\tmp'`. In a single-quoted PowerShell
+// string a backslash is literal, so that is a path with doubled separators —
+// which Windows sometimes tolerates and sometimes does not, and which is never
+// what was meant. It is an artefact of the plan travelling as JSON, so it is
+// fixed here rather than asked for politely in a prompt.
+export function unescapePaths(command) {
+  return String(command || '').replace(/'([^']*)'/g, (whole, inner) =>
+    /[A-Za-z]:\\\\|\\\\\w/.test(inner) ? `'${inner.replace(/\\{2,}/g, '\\')}'` : whole,
+  );
+}
+
 export function asExitCode(command) {
   const trimmed = String(command || '').trim();
   if (!trimmed || process.platform !== 'win32') return trimmed;
@@ -324,10 +337,15 @@ async function runStep(i, { cwd, member, task }) {
     } else if (step.kind === 'web') {
       // Browser work through the DOM: real elements, real clicks, no guessing.
       const reach = reachRoute(instruction);
+      // Gathering ten things takes more moves than reading one page. A budget
+      // of fourteen steps meant a step asked for ten internships got one look
+      // at a results page and had to stop.
+      const wanted = Number(String(instruction).match(/\b(\d{1,2})\b(?=[^.]{0,40}\b(offers?|results?|items?|jobs?|listings?|links?|messages?|emails?|sources?)\b)/i)?.[1] || 0);
       work = await webpilot.browse({
         goal: instruction,
         url: reach.url,
         ask: brain.ask,
+        maxSteps: wanted > 1 ? Math.min(40, 8 + wanted * 3) : 14,
         onProgress: (note) => publish({ type: 'crew:output', step: i, chunk: note }),
       });
 
@@ -411,7 +429,7 @@ async function runStep(i, { cwd, member, task }) {
       const shot = await eyes.screenshot({ reason: step.title });
       work = { ok: shot.ok, out: shot.ok ? `screen captured (${shot.size || 'ok'})` : shot.error };
     } else {
-      work = await run(instruction, { cwd, label: step.title });
+      work = await run(unescapePaths(instruction), { cwd, label: step.title });
     }
 
     setStep(i, { output: work.out || '' });
@@ -458,7 +476,7 @@ async function runStep(i, { cwd, member, task }) {
       return true;
     }
 
-    const check = await run(asExitCode(step.verify), { cwd, label: `verify ${step.title}` });
+    const check = await run(asExitCode(unescapePaths(step.verify)), { cwd, label: `verify ${step.title}` });
     setStep(i, { verifyOutput: check.out });
 
     if (check.ok) {

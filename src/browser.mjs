@@ -278,6 +278,70 @@ async function surface() {
   await send('Emulation.setFocusEmulationEnabled', { enabled: true }).catch(() => {});
 }
 
+// The "verify you are human" checkbox.
+//
+// Cloudflare renders it inside a cross-origin iframe, so it never appears in the
+// element list — Woboo could see a page that was clearly a challenge and had
+// nothing on it to act on. The iframe itself is visible in the top document
+// though, and the checkbox sits at a predictable spot near its left edge.
+//
+// Worth being straight about what this is and is not. It clicks a control the
+// owner could click themselves, on a page they asked to visit. It does not
+// solve puzzles, does not use a solving service, and does not disguise the
+// browser. Turnstile also scores pointer movement and timing, not just the
+// click, so this often will not pass — which is why the loop's real answer to a
+// blocked page is to go and read a different source.
+export async function clickHumanCheck() {
+  assertLive('browser');
+  const box = await evaluate(`(() => {
+    const frame = [...document.querySelectorAll('iframe')].find((f) =>
+      /challenges\\.cloudflare\\.com|turnstile|hcaptcha\\.com|recaptcha/.test(f.src || ''));
+    if (!frame) return null;
+    const b = frame.getBoundingClientRect();
+    if (b.width < 40 || b.height < 20) return null;
+    // The checkbox sits at the left of the widget, vertically centred.
+    return { x: Math.round(b.left + 30), y: Math.round(b.top + b.height / 2), w: Math.round(b.width) };
+  })()`);
+
+  if (!box) return { ok: false, error: 'no human-verification widget on this page' };
+
+  await surface();
+  await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: box.x - 40, y: box.y, button: 'none', buttons: 0 });
+  await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: box.x, y: box.y, button: 'none', buttons: 0 });
+  const at = { x: box.x, y: box.y, button: 'left', clickCount: 1 };
+  await send('Input.dispatchMouseEvent', { type: 'mousePressed', ...at, buttons: 1 });
+  await send('Input.dispatchMouseEvent', { type: 'mouseReleased', ...at, buttons: 0 });
+  record('browser', 'clicked the human-verification checkbox', { level: 'warn' });
+
+  // Give it a moment, then say whether the page actually moved on.
+  await new Promise((r) => setTimeout(r, 4000));
+  const still = await evaluate(
+    `/just a moment|verify you are human|checking your browser|needs to review the security/i.test(document.body.innerText || '')`,
+  );
+  return still
+    ? { ok: false, error: 'the check did not pass — it scores how the pointer moved, not just the click' }
+    : { ok: true };
+}
+
+// Go back, the way a person does when a link turns out to be a dead end.
+//
+// history.back() is unreliable here: Page.navigate does not always leave an
+// entry to go back to, so the model asked to go back three times, watched
+// nothing happen, and concluded the page was broken. Woboo keeps its own trail
+// instead, which is exactly as long as it needs to be.
+const trail = [];
+
+export async function back() {
+  assertLive('browser');
+  trail.pop(); // where we are now
+  const previous = trail[trail.length - 1];
+  if (!previous) return { ok: false, error: 'nowhere to go back to — this is the first page' };
+  await send('Page.navigate', { url: previous });
+  await settle();
+  record('browser', `went back to ${previous}`);
+  return { ok: true, url: previous };
+}
+
 // Which frame an element from the last snapshot lives in. Null means the top
 // document, which is also the honest answer for an index never seen.
 function frameOf(index) {
@@ -460,6 +524,13 @@ async function readAllFrames() {
   }
 
   elementFrames = frames;
+  // Every page Woboo actually ends up on, however it got there. Recording only
+  // deliberate navigations meant a result reached by clicking left no trail, so
+  // "back" had nowhere to go and reported the page was stuck.
+  const here = head?.url || '';
+  if (here && trail[trail.length - 1] !== here) trail.push(here);
+  if (trail.length > 30) trail.shift();
+
   const page = {
     url: head?.url || '',
     title: head?.title || '',
@@ -487,6 +558,7 @@ export async function goto(url) {
   const target = /^https?:\/\//i.test(url) ? url : `https://${url}`;
   await send('Page.navigate', { url: target });
   await settle();
+  // Remember where we have been, so "back" has somewhere to go.
   record('browser', `went to ${target}`);
   return { ok: true, url: target };
 }
