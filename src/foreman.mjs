@@ -21,10 +21,21 @@ import * as scribe from './scribe.mjs';
 import * as research from './research.mjs';
 import * as webpilot from './webpilot.mjs';
 import { route as reachRoute } from './capabilities.mjs';
+import fs from 'node:fs';
 import path from 'node:path';
 import { run } from './shell.mjs';
 
 let mission = null;
+
+// The files this mission has actually produced.
+//
+// A research step names its own document from the topic it researched — the
+// planner cannot know in advance that it will be called
+// how-to-become-a-cloud-engineer-skills-certificatio.pdf. It guessed
+// cloud_engineer_guide.pdf, the step that was meant to send that PDF looked for
+// a name nothing had created, and a perfectly good three-page document sat on
+// disk while the mission reported failure.
+let artifacts = [];
 
 // What the steps of this mission have actually found out.
 //
@@ -61,6 +72,7 @@ export async function runMission(task, { workspace } = {}) {
   const cwd = workspace || settings.workspace || process.cwd();
 
   findings = [];
+  artifacts = [];
   mission = {
     id: crypto.randomBytes(5).toString('hex'),
     task,
@@ -330,9 +342,25 @@ async function runStep(i, { cwd, member, task }) {
       // Hand the finished thing to the owner. One API call, with a token that
       // has been on disk the whole time.
       const named = String(instruction).match(/([-\w./\\: ]+\.(?:pdf|html?|txt|md|png|jpe?g|csv|docx?|zip))/i)?.[1];
-      const file = named ? path.resolve(cwd, named.trim()) : null;
+      let file = named ? path.resolve(cwd, named.trim()) : null;
+
+      // Send what was actually produced, not what the plan guessed would be.
+      //
+      // A research step names its document after the topic it researched, so
+      // the planner's guess at the filename is nearly always wrong — it wanted
+      // cloud_engineer_guide.pdf and the step had written
+      // how-to-become-a-cloud-engineer-skills-certificatio.pdf. The right file
+      // was on disk the whole time.
+      const madeHere = artifacts.filter((f) => !named || path.extname(f) === path.extname(file || ''));
+      if ((!file || !fs.existsSync(file)) && madeHere.length) {
+        file = madeHere[madeHere.length - 1];
+        record('step', `sending ${path.basename(file)}, which is what the earlier step actually produced`, {
+          level: 'warn',
+        });
+      }
+
       if (!file) {
-        work = { ok: false, out: `no file named in this step, so there is nothing to send: "${instruction}"` };
+        work = { ok: false, out: `no file named in this step and no earlier step produced one: "${instruction}"` };
       } else {
         const telegram = await import('./telegram.mjs');
         const sent = await telegram.deliver(file, mission.summary || '');
@@ -387,11 +415,26 @@ async function runStep(i, { cwd, member, task }) {
     }
 
     setStep(i, { output: work.out || '' });
+    if (work.ok && work.file) artifacts.push(work.file);
 
-    // A hard failure with nothing to verify against ends the step. If there is
-    // a verify command, run it anyway — the tool may have succeeded despite a
-    // noisy exit code.
-    if (!work.ok && !step.verify) {
+    // When a step says it failed, say why.
+    //
+    // The reason went into the step record and never into the journal, so a
+    // deliver step that reported "cloud_engineer_guide.pdf does not exist" left
+    // no trace at all — what the owner saw was a verify failing three times for
+    // no stated reason. The most useful sentence Woboo had was the one it threw
+    // away.
+    if (!work.ok && work.out) {
+      record('step', `step ${i + 1}: ${String(work.out).slice(0, 200)}`, { level: 'error' });
+    }
+
+    // Some steps know. A shell command can exit noisily and still have done the
+    // job, so its verify is worth running anyway. But a deliver step that could
+    // not find the file, or a compose step with no material, is not being
+    // pessimistic — it is reporting a fact, and running a check afterwards only
+    // replaces a clear reason with a vaguer one.
+    const DEFINITIVE = new Set(['deliver', 'compose', 'research', 'web']);
+    if (!work.ok && (DEFINITIVE.has(step.kind) || !step.verify)) {
       setStep(i, { status: 'failed', ms: Date.now() - started });
       return false;
     }
