@@ -25,7 +25,11 @@ import { loadSecrets } from './config.mjs';
 export const APPS = {
   gmail: {
     name: 'Gmail',
-    match: /\b(gmail|google mail|my email|send an? email)\b/i,
+    // "Send email to sam@..." matched nothing, because this asked for "send a
+    // email" or "send an email" and nobody writes it that way. A task about
+    // mail has to be recognised as one, or it is routed as a generic web errand
+    // and none of what Woboo knows about Gmail is used.
+    match: /\b(gmail|google mail|my e-?mails?|e-?mails? (i |that )?(i )?received|send (an? )?e-?mail|e-?mails? (to|from)\b|inbox)\b/i,
     // Gmail's compose deep link, which fills the hard fields for us.
     //
     // Driving the inbox compose window does not work and the reasons are all
@@ -39,7 +43,16 @@ export const APPS = {
     // committed chip and the subject already set. Twenty-eight elements instead
     // of three hundred, nothing to click, and nothing to fight for focus. Only
     // the body is typed, and that works.
-    web: 'https://mail.google.com/mail/u/0/?view=cm&fs=1',
+    web: 'https://mail.google.com/mail/u/0/#inbox',
+    // Where to start depends on what is being asked for. Making the compose
+    // window the single entry point meant "read the emails from support@..."
+    // opened a blank compose form and the loop had nowhere sensible to go.
+    entry: (goal) =>
+      /\b(send|write|compose|reply|email .* to|mail .* to|draft)\b/i.test(String(goal))
+        ? 'https://mail.google.com/mail/u/0/?view=cm&fs=1'
+        : 'https://mail.google.com/mail/u/0/#inbox',
+    // Reading mail is a search, and Gmail's own search is the way to do it.
+    search: (query) => `https://mail.google.com/mail/u/0/#search/${encodeURIComponent(query)}`,
     api: { name: 'Gmail API', base: 'https://gmail.googleapis.com/gmail/v1', secret: 'googleOAuth' },
     hint:
       'To write an email, navigate to ' +
@@ -49,7 +62,12 @@ export const APPS = {
       'that is the only field to fill. Do NOT try to type the recipient or subject by hand: Gmail\'s recipient ' +
       'box steals focus and everything you type lands in it. "Send" is the blue button at the bottom. ' +
       'Gmail saves drafts by itself, so if the task says to leave a draft, just finish — never click ' +
-      '"Discard draft", which throws the message away.',
+      '"Discard draft", which throws the message away. ' +
+      'To FIND messages instead of writing one, go to ' +
+      'https://mail.google.com/mail/u/0/#search/QUERY with the query url-encoded — for example ' +
+      'from%3Asupport%40example.com. That is Gmail\'s own search. Never put a Gmail query into a web ' +
+      'search engine: the messages are in the mailbox, not on the internet. Then open the results and ' +
+      'read them.',
   },
   outlook: {
     name: 'Outlook',
@@ -134,7 +152,8 @@ export function route(goal) {
     return {
       rung: 'dom',
       app,
-      url: app.web,
+      // An app can choose where to start based on what is being asked of it.
+      url: app.entry ? app.entry(goal) : app.web,
       why: app.api
         ? `${app.name} has an API but no ${app.api.secret} stored, so the web UI it is`
         : `${app.name} is a web app`,

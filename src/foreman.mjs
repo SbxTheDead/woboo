@@ -135,6 +135,18 @@ export async function runMission(task, { workspace } = {}) {
       ms: 0,
     }));
     mission.state = 'running';
+
+    // Say what was understood before doing any of it. A misunderstanding is
+    // cheap to correct now and expensive to discover in the finished work — and
+    // the owner cannot correct one they were never shown.
+    const grasp = plan.understanding;
+    if (grasp) {
+      mission.understanding = grasp;
+      record('mission', `what you want: ${grasp.asking_for}`, { level: 'info' });
+      for (const item of grasp.deliverables || []) record('mission', `  • ${item}`, { level: 'info' });
+      if (grasp.done_when) record('mission', `done when: ${grasp.done_when}`, { level: 'info' });
+      for (const care of grasp.care_about || []) record('mission', `  ⚠ ${care}`, { level: 'warn' });
+    }
     record('mission', `plan: ${plan.summary}`, { level: 'info' });
     snapshot();
 
@@ -205,6 +217,37 @@ export function asExitCode(command) {
   if (/\bexit\b/i.test(trimmed) || SETS_OWN_EXIT.test(trimmed)) return trimmed;
   // Anything else is treated as a condition: true passes, false fails.
   return `if (${trimmed}) { exit 0 } else { exit 1 }`;
+}
+
+// A verify that cannot parse is not a failing step.
+//
+// The planner wrote `if (Test-Path 'x') -and ((Get-Item 'x').Length -gt 0)) {
+// exit 0 } else { exit 1 }` — one bracket too many. PowerShell refused to parse
+// it and exited 1, so the step was declared unproven, handed to the repair loop,
+// and run twice more with the identical broken command. Three failures, three
+// identical errors, and a report blaming work that may have been done perfectly.
+//
+// Unbalanced brackets are the whole of it in practice, and they cost nothing to
+// see without running anything.
+export function verifyIsMalformed(command) {
+  const text = String(command || '');
+  if (!text.trim()) return null;
+  // Brackets inside quotes are data, not syntax — a path may contain anything.
+  const bare = text.replace(/'[^']*'/g, "''").replace(/"[^"]*"/g, '""');
+  for (const [open, close, name] of [
+    ['(', ')', 'parenthesis'],
+    ['{', '}', 'brace'],
+    ['[', ']', 'bracket'],
+  ]) {
+    let depth = 0;
+    for (const ch of bare) {
+      if (ch === open) depth += 1;
+      else if (ch === close) depth -= 1;
+      if (depth < 0) return `an unmatched closing ${name}`;
+    }
+    if (depth > 0) return `${depth} unclosed ${name}${depth > 1 ? 's' : ''}`;
+  }
+  return null;
 }
 
 async function runStep(i, { cwd, member, task }) {
@@ -308,6 +351,16 @@ async function runStep(i, { cwd, member, task }) {
 
     setStep(i, { status: 'verifying' });
     setFace('testing', `checking: ${step.verify}`);
+
+    // A check that cannot run proves nothing either way. Say so once and take
+    // the step at its word, rather than failing it three times over a bracket.
+    const broken = verifyIsMalformed(step.verify);
+    if (broken) {
+      record('step', `step ${i + 1}: the check itself is malformed (${broken}) — skipping it`, { level: 'warn' });
+      setStep(i, { status: 'ok', ms: Date.now() - started, verifyOutput: `check not run: ${broken}` });
+      return true;
+    }
+
     const check = await run(asExitCode(step.verify), { cwd, label: `verify ${step.title}` });
     setStep(i, { verifyOutput: check.out });
 

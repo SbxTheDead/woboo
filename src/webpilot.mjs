@@ -47,10 +47,15 @@ const SYSTEM = `You are operating a real web browser for Woboo's owner.
 Each turn you are given the page's URL, title, its visible text, and a numbered
 list of everything interactive on it. Choose ONE next action.
 
-- To search for something, use "search" with the query. Never navigate to a
+- To search the internet, use "search" with the query. Never navigate to a
   search engine's home page and operate it: that is a consent dialog, a
   JavaScript form and often the wrong language, and it wastes every step you
   spend on it. "search" lands you straight on the results.
+- "search" searches the INTERNET. It cannot see inside an application you are
+  signed in to. To find something in a mailbox, a drive, a chat history or any
+  other account, use that application's own search — usually its search box, or
+  a url it accepts. Putting "from:someone@example.com" into a web search engine
+  returns pages about the internet, never the messages in the mailbox.
 - Act on elements by their number. They are real elements, so a click lands
   exactly on the thing you named — you never have to guess at a position.
 - Elements marked "below" are further down the page. You can still click them;

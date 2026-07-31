@@ -112,7 +112,19 @@ async function ask({ system, prompt, schema, name, maxTokens = 8000, think = tru
     body.temperature = 1;
     body.top_p = 0.95;
     body.chat_template_kwargs = { enable_thinking: true };
-    body.reasoning_budget = Math.min(16384, maxTokens * 2);
+    // The reasoning budget comes OUT of max_tokens; it is not extra.
+    //
+    // This asked for twice the entire output budget to be spent thinking, so
+    // the model deliberated until it ran out and the answer was never written.
+    // What came back was a fragment of its own scratchpad, which parsed as JSON
+    // often enough to look like a plan — for a task it had invented, because
+    // the scratchpad was where it was imagining examples. That is where "Slack
+    // #project-alpha" and "team@example.com" came from on a request that
+    // mentioned neither.
+    //
+    // Half, so there is always at least as much room for the answer as for the
+    // thinking that produced it.
+    body.reasoning_budget = Math.min(8192, Math.floor(maxTokens * 0.5));
   } else {
     body.temperature = 0.2;
     // Say "off" rather than staying silent. Nemotron reasons by default, and an
@@ -273,7 +285,7 @@ ${stance}
 ` : ''}
 Produce the plan.`;
 
-  const { data, usage, model: used } = await ask({ system, prompt, schema, name: 'plan', maxTokens: 6000 });
+  const { data, usage, model: used } = await ask({ system, prompt, schema, name: 'plan', maxTokens: 14_000 });
   record('brain', `planned ${data.steps?.length ?? 0} step(s) with ${used}`, {
     level: 'ok',
     usage: usage && { in: usage.prompt_tokens, out: usage.completion_tokens },

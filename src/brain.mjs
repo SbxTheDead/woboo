@@ -20,6 +20,47 @@ import { record } from './journal.mjs';
 const PLAN_SCHEMA = {
   type: 'object',
   properties: {
+    // Understand the request before planning against it.
+    //
+    // Woboo was going straight from a sentence to a list of commands, and the
+    // gap showed: asked to send an email and then summarise a correspondence in
+    // an organised PDF, it produced six steps that wrote a text file nothing
+    // created and checked for it three times. Nowhere did it work out that
+    // there were two things wanted and what each of them had to look like
+    // finished.
+    //
+    // Saying that first, in its own words, is what makes the plan follow from
+    // the request rather than from the shape of the sentence. It is also what
+    // the owner sees, so a misunderstanding is visible before any work happens
+    // rather than after all of it.
+    understanding: {
+      type: 'object',
+      description: 'What the owner actually wants, worked out before any steps are chosen.',
+      properties: {
+        asking_for: {
+          type: 'string',
+          description: 'The request restated plainly, in your own words, as a person would explain it to a colleague.',
+        },
+        deliverables: {
+          type: 'array',
+          description:
+            'Each separate thing the owner should have when this is finished, and in what form — "an email sent to sam@x.com", "a PDF summarising the support thread". One entry per thing; a task often has more than one.',
+          items: { type: 'string' },
+        },
+        done_when: {
+          type: 'string',
+          description: 'How the owner would know it worked, stated as something observable.',
+        },
+        care_about: {
+          type: 'array',
+          description:
+            'What would make this a bad job even if every step ran: the wrong tone, the wrong account, missing the point of the question, a document nobody could read. Empty if nothing stands out.',
+          items: { type: 'string' },
+        },
+      },
+      required: ['asking_for', 'deliverables', 'done_when', 'care_about'],
+      additionalProperties: false,
+    },
     summary: {
       type: 'string',
       description: 'One sentence describing what finishing this task means.',
@@ -59,7 +100,7 @@ const PLAN_SCHEMA = {
       },
     },
   },
-  required: ['summary', 'steps'],
+  required: ['understanding', 'summary', 'steps'],
   additionalProperties: false,
 };
 
@@ -77,6 +118,31 @@ const REPAIR_SCHEMA = {
 };
 
 const SYSTEM = `You are the planning half of Woboo, an agent that operates its owner's PC.
+
+BEFORE ANYTHING ELSE, WORK OUT WHAT IS ACTUALLY WANTED.
+
+Fill in "understanding" first and let the plan follow from it. Not from the
+shape of the sentence — from what the person meant.
+
+- People write one sentence containing several requests. "Send Sam an email
+  asking for updates, then check everything support@x.com sent me and give me a
+  summary in an organised PDF" is two deliverables, not one: a sent email, and a
+  document. List each separately. A plan that quietly serves only the first is a
+  failed plan even if every step passes.
+- Read for intent, not keywords. "Do me a summary of what happened" is asking
+  what the story was — who wanted what, what was agreed, where it stands — not
+  for a list of subject lines. "Organised" means it has a shape someone can
+  read: headings, order, the point stated.
+- Where the material lives matters. Messages in a mailbox are found through that
+  mailbox's own search, never a web search engine. Files on disk are read with a
+  command. Say in the plan where each thing is going to come from.
+- If the request is genuinely ambiguous, plan the reading you would most likely
+  be right about and note the assumption in "care_about". Do not stall.
+
+Then plan the steps that produce exactly those deliverables, in an order where
+each has what it needs from the one before. Every step exists to serve a
+deliverable; if a step serves none, drop it.
+
 
 Woboo does not write code itself. It delegates coding to a tool already installed on
 the machine (Claude Code or Codex), then proves the work with real commands before
@@ -116,6 +182,14 @@ reporting back. Plan for that shape:
     "In Gmail, send an email to sam@example.com with the subject 'Report' and
      the elephants PDF attached."
   Its "verify" is usually empty: the step reports what it saw on the page.
+- A "web" step CANNOT write files. It reads pages and reports what it found, and
+  that report is passed to the steps after it. Never write "extract X to a text
+  file" as a web step and then verify that the file exists — the file will never
+  be there, the check will fail three times, and the failure will be blamed on
+  work that was actually done. If the material has to end up in a document, the
+  web step gathers it and a "compose" step writes it.
+- Never write a "verify" for a file that no earlier step actually creates. A
+  check is only worth having when a command in the plan is what makes it pass.
 - Use "computer" steps for anything that happens on the owner's screen. Woboo
   looks at the display and drives the real mouse and keyboard. State the goal,
   not the clicks — it works out where to click by looking.
