@@ -23,7 +23,9 @@ test('catches a key pasted wrong before it becomes a 401 an hour later', () => {
   assert.equal(looksRight('nvidiaApiKey', 'nvapi-'), false);
   assert.equal(looksRight('tavilyApiKey', 'tvly-dev-abcdefghijkl'), true);
   assert.equal(looksRight('tavilyApiKey', 'nvapi-wrong-one'), false);
-  assert.equal(looksRight('telegramToken', '8834776041:AAG1KlvytOaesZaY3f62yMjF1JEjprp0nU'), true);
+  // Shaped like a bot token and deliberately not one. Fixtures get committed,
+  // and a real credential in a test file is a real credential in the repo.
+  assert.equal(looksRight('telegramToken', '1234567890:AAaaBBbbCCccDDddEEeeFFffGGgg000111222'), true);
   assert.equal(looksRight('telegramToken', 'just-a-string'), false);
 });
 
