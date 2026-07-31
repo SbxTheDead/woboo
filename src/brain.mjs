@@ -74,14 +74,15 @@ const PLAN_SCHEMA = {
           title: { type: 'string', description: 'Short imperative label, under 60 chars.' },
           kind: {
             type: 'string',
-            enum: ['research', 'web', 'delegate', 'shell', 'compose', 'computer', 'inspect', 'deliver'],
+            enum: ['research', 'web', 'delegate', 'shell', 'compose', 'computer', 'inspect', 'deliver', 'read'],
             description:
               'research = search the web, read sources, write a cited report and render it to PDF, all in one step; ' +
               'web = drive a real browser through the DOM: click real elements, fill forms, read pages; ' +
               'delegate = hand a spec to the installed coding tool; shell = run a command directly; ' +
               'compose = read local files and WRITE a document from them; ' +
               'computer = drive the mouse and keyboard on screen like a person; inspect = look at the screen; ' +
-              'deliver = send a finished file to the owner on Telegram (instruction is just the file path).',
+              'deliver = send a finished file to the owner on Telegram (instruction is just the file path); ' +
+              'read = pull the text out of a document on disk (instruction is the file path, optionally "-> output.txt").',
           },
           instruction: {
             type: 'string',
@@ -158,19 +159,27 @@ credential, not the website.
 
 WOBOO READS DOCUMENTS ITSELF.
 
-Never write a command to extract text from a file. No PyPDF2, no pdftotext, no
-Python one-liner — Woboo reads PDF, Word, text, markdown, HTML, CSV and JSON
-natively, and a step that shells out for it will fail on quoting, on a missing
-package, or on a path, three times over.
+Extracting text from a file is a "read" step. Its instruction is the path, and
+nothing else: "D:\\rayanesbaacs.pdf", or "D:\\rayanesbaacs.pdf -> D:\\out\\resume.txt"
+to save it. PDF, Word, text, markdown, HTML, CSV and JSON all work.
 
-Just name the file in the step that needs it. A "research" or "compose" step
-whose instruction mentions D:\\path\\to\\file.pdf reads that file first, before
-anything else, and treats it as the most authoritative source it has.
+This holds EVEN WHEN THE TASK NAMES A TOOL. If the owner writes "use PyPDF2 to
+extract the resume", they are telling you what they want done, not dictating the
+implementation — and the implementation they suggested is one that fails on
+quoting, on a missing package, or on a path, three attempts in a row. Do the
+thing they want, the way that works.
 
   Wrong: shell — pip install PyPDF2; python -c "...extract_text()..."
-         then research — find internships
-  Right: research — "Find ten software internships in China suited to the
-         résumé at D:\\rayanesbaacs.pdf. Deliver a PDF."
+  Wrong: shell — powershell -Command "@'...'@ | Set-Content extract.py"
+  Right: read  — D:\\rayanesbaacs.pdf -> D:\\wobo\\resume.txt
+
+A "research" or "compose" step also reads any file its instruction names, so
+there is no need for a separate step before it just to fetch the text.
+
+NEVER WRITE A SCRIPT FILE FROM A SHELL COMMAND. Nesting a here-string inside
+powershell -Command inside JSON is three levels of quoting and it has never once
+survived the trip. If something genuinely needs a script, that is a "delegate"
+step for a coding tool.
 
 NEVER PLAN A PLACEHOLDER.
 

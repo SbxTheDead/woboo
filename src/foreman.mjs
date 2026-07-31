@@ -282,6 +282,28 @@ export function unescapePaths(command) {
   );
 }
 
+// The command inside the explanation, if the model wrapped one in prose.
+//
+// A repair came back as "Use a properly escaped single-quoted string with
+// backtick-n for newlines: powershell -Command ..." and was executed verbatim,
+// so the shell tried to run the word "Use". Returning the original unchanged is
+// better than running an English sentence — at least the failure is the one
+// already diagnosed rather than a new and stranger one.
+const COMMAND_START =
+  /^\s*(?:[$&.\\/]|[A-Za-z]:|if\b|foreach\b|try\b|npm\b|npx\b|node\b|git\b|py(?:thon3?)?\b|pip\b|dotnet\b|cargo\b|go\b|make\b|[A-Z][a-z]+-[A-Z][a-z]+\b|[a-z][\w.-]*\s+[-\w])/;
+
+export function stripAdvice(instruction) {
+  const text = String(instruction || '').trim();
+  if (!text || COMMAND_START.test(text)) return text;
+
+  // Prose first, command after a colon or on a later line.
+  for (const candidate of [text.split(/:\s+/).slice(1).join(': '), text.split('\n').slice(1).join('\n')]) {
+    const trimmed = candidate.trim();
+    if (trimmed && COMMAND_START.test(trimmed)) return trimmed;
+  }
+  return '';
+}
+
 export function asExitCode(command) {
   const trimmed = String(command || '').trim();
   if (!trimmed || process.platform !== 'win32') return trimmed;
@@ -392,6 +414,32 @@ async function runStep(i, { cwd, member, task }) {
       const seen = String(work?.text || work?.out || '').trim();
       if (seen.length > 40) {
         findings.push({ file: `${step.title} (read from the web)`, text: seen });
+      }
+    } else if (step.kind === 'read') {
+      // Text out of a document, without a shell, a package, or three levels of
+      // quoting. "path/in.pdf" or "path/in.pdf -> path/out.txt".
+      const [from, to] = String(instruction)
+        .split('->')
+        .map((s) => s.trim().replace(/^['"]|['"]$/g, ''));
+      const source = path.resolve(cwd, (from.match(/[^\s'"]+\.\w{2,5}/) || [from])[0]);
+      try {
+        const text = await research.readLocal(source);
+        if (!text || text.length < 20) {
+          work = { ok: false, out: `${path.basename(source)} yielded no readable text` };
+        } else {
+          if (to) {
+            const target = path.resolve(cwd, (to.match(/[^\s'"]+\.\w{2,5}/) || [to])[0]);
+            fs.mkdirSync(path.dirname(target), { recursive: true });
+            fs.writeFileSync(target, text, 'utf8');
+            work = { ok: true, out: `read ${path.basename(source)} — ${text.length} characters`, file: target, text };
+          } else {
+            work = { ok: true, out: text.slice(0, 4000), text };
+          }
+          findings.push({ file: source, text });
+          record('read', `${path.basename(source)} — ${text.length} characters`, { level: 'ok' });
+        }
+      } catch (err) {
+        work = { ok: false, out: `could not read ${path.basename(source)}: ${err.message}` };
       }
     } else if (step.kind === 'deliver') {
       // Hand the finished thing to the owner. One API call, with a token that
@@ -580,6 +628,16 @@ async function runStep(i, { cwd, member, task }) {
       // a different command.
       try {
         const fix = await brain.repair({ task, step: { ...step, instruction }, failure: check.out, attempt });
+
+        // A sentence is not a command.
+        //
+        // One repair came back as "Use a properly escaped single-quoted string
+        // with backtick-n for newlines: powershell -Command ..." — advice with
+        // the command bolted on the end — and it was run verbatim, so the shell
+        // tried to execute the word "Use". Take the command out of the advice,
+        // or refuse it.
+        if (fix.instruction) fix.instruction = stripAdvice(fix.instruction);
+
         if (fix.instruction && fix.instruction.trim() !== instruction.trim()) {
           instruction = fix.instruction;
           setStep(i, { diagnosis: fix.diagnosis });

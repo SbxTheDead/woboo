@@ -18,8 +18,8 @@
     "panel": "node wobo.mjs up",
     "doctor": "node wobo.mjs doctor",
     "selftest": "node wobo.mjs selftest",
-    "test": "node --test \"test/*.test.mjs\"",
-    "test:live": "node --test \"test/*.test.mjs\" \"test/live/*.test.mjs\""
+    "test": "node --test --test-concurrency=1 \"test/*.test.mjs\"",
+    "test:live": "node --test --test-concurrency=1 \"test/*.test.mjs\" \"test/live/*.test.mjs\""
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.72.0"
