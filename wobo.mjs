@@ -403,6 +403,17 @@ async function cmdWidget() {
   const here = path.dirname(fileURLToPath(import.meta.url));
   const entry = path.join(here, 'desktop', 'main.mjs');
 
+  // Starting a widget that cannot think is a worse first impression than one
+  // question. Offer setup rather than launching something that blinks and does
+  // nothing — but only when there is a terminal to answer in.
+  const setup = await import('./src/setup.mjs');
+  if (!setup.isConfigured() && process.stdin.isTTY) {
+    say(yellow('  Woboo has no brain configured yet.'));
+    const result = await setup.run({ say, colors: { bold, dim, green, yellow, cyan, red } });
+    if (!result.ok) return 1;
+    say('');
+  }
+
   let electron;
   try {
     electron = createRequire(import.meta.url)('electron');
@@ -649,6 +660,7 @@ function help() {
   say(BANNER);
   say(`  ${bold('usage')}  wobo <command> [options]`);
   say('');
+  say(`  ${bold('setup')}              set Woboo up from scratch ${dim('(start here; --again to redo)')}`);
   say(`  ${bold('widget')}             put Woboo on your desktop ${dim('(the companion)')}`);
   say(`  ${bold('drive')} "<goal>"     hand it the mouse and keyboard ${dim('(--dry to preview)')}`);
   say(`  ${bold('telegram')}           reach Woboo from your phone`);
@@ -656,6 +668,7 @@ function help() {
   say(`  ${bold('memory')} [dir]       what Woboo remembers ${dim('(--all, --forget)')}`);
   say(`  ${bold('secret')} <name> <v>  store the anthropic, nvidia or telegram key`);
   say(`  ${bold('nim')} [model|list]   use NVIDIA NIM as the brain ${dim('(free tier)')}`);
+  say(`  ${bold('browser')} [signin]   Woboo's own browser profile ${dim('(reset, --restart)')}`);
   say(`  ${bold('run')} "<task>"       run one mission here ${dim('(--workspace DIR)')}`);
   say(`  ${bold('selftest')}           prove the foreman loop verifies and catches failures`);
   say(`  ${bold('doctor')}             check what works on this machine`);
@@ -724,6 +737,15 @@ async function main() {
       say(green(`  ${raw ? 'stored' : 'cleared'} ${name}`));
       say(dim(`  ${PATHS.secrets} now holds: ${stored.join(', ') || 'nothing'}`));
       return 0;
+    }
+    case 'setup': {
+      const setup = await import('./src/setup.mjs');
+      const result = await setup.run({
+        say,
+        colors: { bold, dim, green, yellow, cyan, red },
+        force: Boolean(flags.force || flags.again),
+      });
+      return result.ok ? 0 : 1;
     }
     case 'up':
       return cmdUp(flags);
