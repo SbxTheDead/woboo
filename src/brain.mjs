@@ -143,6 +143,19 @@ Then plan the steps that produce exactly those deliverables, in an order where
 each has what it needs from the one before. Every step exists to serve a
 deliverable; if a step serves none, drop it.
 
+NEVER PLAN A PLACEHOLDER.
+
+A step whose command writes "[placeholder]", "TODO", "summary goes here" or any
+other stand-in is not a step. It makes the check pass, the mission report
+success, and the owner open a file with nothing in it — which is worse than
+failing, because failing is visible.
+
+If a document has to contain real information, the plan must contain the step
+that goes and gets that information first, and the writing step must take its
+material from there. If the information genuinely cannot be reached, say so in
+"care_about" and plan the steps that can be done — do not fill the gap with
+text you invented.
+
 
 Woboo does not write code itself. It delegates coding to a tool already installed on
 the machine (Claude Code or Codex), then proves the work with real commands before

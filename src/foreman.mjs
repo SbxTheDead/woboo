@@ -25,6 +25,14 @@ import path from 'node:path';
 import { run } from './shell.mjs';
 
 let mission = null;
+
+// What the steps of this mission have actually found out.
+//
+// A "web" step reads pages and reports what it saw. That report was logged and
+// then dropped, so a later "compose" step -- asked to write a document from the
+// gathered material -- had nothing, fell back to globbing the workspace, and
+// produced a confident PDF about package-lock.json. Findings travel forward now.
+let findings = [];
 let running = false;
 
 export function currentMission() {
@@ -52,6 +60,7 @@ export async function runMission(task, { workspace } = {}) {
   const settings = loadSettings();
   const cwd = workspace || settings.workspace || process.cwd();
 
+  findings = [];
   mission = {
     id: crypto.randomBytes(5).toString('hex'),
     task,
@@ -309,14 +318,45 @@ async function runStep(i, { cwd, member, task }) {
         ask: brain.ask,
         onProgress: (note) => publish({ type: 'crew:output', step: i, chunk: note }),
       });
+
+      // Keep what it read. A browser step is how Woboo finds things out, and
+      // its report was being logged and then dropped — so the step after it,
+      // asked to write a document from what was gathered, had nothing.
+      const seen = String(work?.text || work?.out || '').trim();
+      if (seen.length > 40) {
+        findings.push({ file: `${step.title} (read from the web)`, text: seen });
+      }
     } else if (step.kind === 'compose') {
       // The step that turns gathered material into something worth reading.
-      // Sources come from whatever paths the instruction names; failing that,
-      // whatever the earlier steps left in the workspace.
       const named = String(instruction).match(/(?:^|[\s:'"(])([.\w][-\w./\\]*\.(?:html?|txt|md|json))\b/gi) || [];
       const folders = String(instruction).match(/(?:^|[\s:'"(])(\.?[\w][-\w./\\]*\/)(?=[\s,'")]|$)/g) || [];
       const patterns = [...named, ...folders].map((s) => s.trim().replace(/^['"(:]+/, ''));
-      const sources = scribe.gather(cwd, patterns.length ? patterns : ['.']);
+
+      // What the earlier steps actually found, first. A "web" step reads pages
+      // and reports what it saw; that report was going nowhere, so the document
+      // written from it had nothing to be written from.
+      const sources = [...findings];
+      const onDisk = scribe.gather(cwd, patterns.length ? patterns : sources.length ? [] : ['.']);
+      sources.push(...onDisk.filter((s) => String(s.text || '').trim().length > 40));
+
+      // Refuse rather than invent.
+      //
+      // With no usable material this fell back to globbing the whole workspace
+      // and produced a confident, well-formatted PDF about package-lock.json,
+      // the README and a leftover file about elephants — for a task that asked
+      // about a support mailbox. A document that looks finished and is about
+      // the wrong thing is worse than no document: it is the one failure the
+      // owner cannot see at a glance.
+      if (!sources.length) {
+        const wanted = patterns.length ? patterns.join(', ') : 'anything from the earlier steps';
+        return {
+          ok: false,
+          out:
+            `Nothing to write from. This step was meant to build a document out of ${wanted}, ` +
+            `and there is no material there — the step that was supposed to gather it did not produce any. ` +
+            `Writing something anyway would mean a document about whatever else happens to be in the folder.`,
+        };
+      }
 
       const out = String(instruction).match(/([-\w./\\]+\.html?)\b/i)?.[1];
       work = await scribe.compose({
@@ -396,9 +436,38 @@ async function runStep(i, { cwd, member, task }) {
       }
     } else if (step.kind === 'delegate') {
       instruction = `${step.instruction}\n\nThe check \`${step.verify}\` failed with:\n${check.out.slice(0, 4000)}\n\nFix that.`;
+    } else if (step.kind === 'shell' && brain.hasCredentials()) {
+      // A broken command is not a flaky one.
+      //
+      // This used to re-run shell steps unchanged, on the theory that there was
+      // nothing to re-brief. But the command that failed was
+      //   $html = "<html><body><pre>$content</pre></body></html>\);
+      // — a stray bracket. It failed identically three times, three seconds
+      // apart, and the step was reported as unprovable. A command with a syntax
+      // error will fail the same way forever; the only useful move is to write
+      // a different command.
+      try {
+        const fix = await brain.repair({ task, step: { ...step, instruction }, failure: check.out, attempt });
+        if (fix.instruction && fix.instruction.trim() !== instruction.trim()) {
+          instruction = fix.instruction;
+          setStep(i, { diagnosis: fix.diagnosis });
+          record('step', `rewrote the command: ${fix.diagnosis}`.slice(0, 160), { level: 'warn' });
+          memory.learnFromRepair(cwd, {
+            step: step.title,
+            verify: step.verify,
+            diagnosis: fix.diagnosis,
+            fix: fix.instruction,
+          });
+        } else {
+          record('step', 'the brain returned the same command; not retrying it a third time', { level: 'warn' });
+          break;
+        }
+      } catch (err) {
+        record('brain', `could not diagnose the failed command (${err.message})`, { level: 'warn' });
+        break;
+      }
     }
-    // Shell and inspect steps simply run again: a flaky check deserves one more
-    // try, but there is nothing to re-brief.
+    // An inspect step simply runs again: a flaky look deserves one more try.
   }
 
   setStep(i, { status: 'failed', ms: Date.now() - started });
