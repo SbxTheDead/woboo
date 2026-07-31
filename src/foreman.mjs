@@ -20,6 +20,7 @@ import * as memory from './memory.mjs';
 import * as scribe from './scribe.mjs';
 import * as research from './research.mjs';
 import * as webpilot from './webpilot.mjs';
+import * as acceptance from './acceptance.mjs';
 import { route as reachRoute } from './capabilities.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -184,13 +185,49 @@ export async function runMission(task, { workspace } = {}) {
     }
 
     if (mission.state === 'running') {
-      mission.state = 'done';
+      // Every step ran. That is not the same as the owner having what they
+      // asked for, and treating it as the same is how a PDF about
+      // package-lock.json got reported as a finished piece of research.
       const checked = mission.steps.filter((s) => s.verify).length;
-      mission.report = checked
+      const ran = checked
         ? `All ${mission.steps.length} steps done, ${checked} proven by a command.`
-        : `All ${mission.steps.length} steps done. Nothing was independently checkable.`;
-      setFace('happy', 'mission complete');
-      record('mission', mission.report, { level: 'ok' });
+        : `All ${mission.steps.length} steps done.`;
+
+      let shortfall = acceptance.obviousShortfall(artifacts);
+      let verdicts = [];
+
+      if (!shortfall && mission.understanding && brain.hasCredentials()) {
+        setFace('testing', 'checking it is what you asked for');
+        try {
+          const result = await acceptance.check({
+            understanding: mission.understanding,
+            steps: mission.steps,
+            artifacts,
+            ask: brain.ask,
+          });
+          verdicts = result.verdicts || [];
+          if (result.checked && !result.met) shortfall = result.shortfall || 'not everything asked for was produced';
+        } catch (err) {
+          // A checker that cannot run must not turn finished work into a
+          // failure. Say it could not be checked and leave the verdict alone.
+          record('accept', `could not check the deliverables (${err.message})`, { level: 'warn' });
+        }
+      }
+
+      mission.verdicts = verdicts;
+      if (shortfall) {
+        mission.state = 'failed';
+        mission.report = `${ran} But you did not get what you asked for: ${shortfall}`;
+        setFace('confused', 'not what was asked for');
+        record('mission', mission.report, { level: 'error' });
+      } else {
+        mission.state = 'done';
+        mission.report = verdicts.length
+          ? `${ran} ${verdicts.length} deliverable(s) checked against what you asked for.`
+          : ran;
+        setFace('happy', 'mission complete');
+        record('mission', mission.report, { level: 'ok' });
+      }
     }
   } catch (err) {
     if (err instanceof Halted) {
