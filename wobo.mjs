@@ -521,6 +521,63 @@ async function cmdDoctor() {
   const stopped = guard.isStopped();
   check('stop latch', stopped ? 'warn' : 'ok', stopped ? `engaged: ${guard.stopReason()}` : 'clear');
 
+  // The four things that failed silently in front of the owner. A check that
+  // does not cover the way something actually broke is decoration.
+  const secrets = loadSecrets();
+  const browser = await import('./src/browser.mjs');
+  const nim = await import('./src/nim.mjs');
+
+  // Telegram: not "is there a token" but "is anyone listening, and who".
+  if (!secrets.telegramToken) {
+    check('telegram', 'warn', 'no token — run `woboo secret telegram <token>`');
+  } else {
+    const holder = telegram.lockHolder();
+    const live = await telegram.reachable().catch((err) => ({ ok: false, error: err.message }));
+    check(
+      'telegram',
+      live.ok ? (holder ? 'ok' : 'warn') : 'bad',
+      live.ok
+        ? holder
+          ? `@${live.username}, polled by pid ${holder.pid}`
+          : `@${live.username} reachable, but nothing is polling — start the app`
+        : `unreachable: ${live.error}`,
+    );
+    check(
+      'telegram pairing',
+      settings.telegramChatId ? 'ok' : 'warn',
+      settings.telegramChatId ? `paired with chat ${settings.telegramChatId}` : 'not paired — send /pair from your phone',
+    );
+  }
+
+  // The browser: does the debugging port actually open? Chrome refuses it on the
+  // default profile, which is how every browser mission failed for a day.
+  const attached = await browser.open().then(
+    (r) => r,
+    (err) => ({ ok: false, error: err.message }),
+  );
+  check('browser', attached.ok ? 'ok' : 'bad', attached.ok ? browser.profileDir() : attached.error);
+  browser.close();
+
+  // The brain Woboo is actually configured to use.
+  if (settings.provider === 'nim' || nim.hasCredentials()) {
+    const key = nim.hasCredentials();
+    check('nim', key ? 'ok' : 'bad', key ? nim.model() : 'no NVIDIA key — run `woboo secret nvidia nvapi-...`');
+  }
+
+  check(
+    'search',
+    secrets.tavilyApiKey ? 'ok' : 'warn',
+    secrets.tavilyApiKey ? 'Tavily' : 'no Tavily key — falling back to scraped results',
+  );
+
+  // Anything Woboo already complained about and nobody read.
+  const recentErrors = tail(200).filter(
+    (entry) => entry.level === 'error' && Date.now() - new Date(entry.t).getTime() < 86_400_000,
+  );
+  if (recentErrors.length) {
+    check('recent errors', 'warn', `${recentErrors.length} in the last day — ${recentErrors.at(-1).msg.slice(0, 60)}`);
+  }
+
   say(BANNER);
   const width = Math.max(...rows.map((r) => r.label.length));
   for (const row of rows) {

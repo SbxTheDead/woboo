@@ -14,7 +14,7 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import https from 'node:https';
 import path from 'node:path';
-import { loadSettings, saveSettings, PATHS, ensureHome } from './config.mjs';
+import { loadSettings, saveSettings, loadSecrets, PATHS, ensureHome } from './config.mjs';
 import { subscribe } from './bus.mjs';
 import { record, tail } from './journal.mjs';
 import * as guard from './guard.mjs';
@@ -87,6 +87,25 @@ function releaseLock() {
 // Exposed for the tests, which is worth the small ugliness: every case they
 // cover is one that silently breaks Telegram rather than throwing.
 export const __lock = { holdLock, lockHolder, releaseLock };
+
+// Who, if anyone, is currently polling. `woboo doctor` asks this, because "is
+// there a token" was never the question — a token was always there while the
+// bot sat deaf.
+export { lockHolder };
+
+// Is the bot reachable at all, and what is it called? A short call, not a poll,
+// so it does not steal the slot from a running Woboo.
+export async function reachable() {
+  const token = loadSecrets().telegramToken || process.env.WOBO_TELEGRAM_TOKEN;
+  if (!token) return { ok: false, error: 'no token stored' };
+  try {
+    const me = await request(`${API}/bot${token}/getMe`, {}, 8000);
+    if (!me.ok) return { ok: false, error: me.description || 'getMe refused' };
+    return { ok: true, username: me.result.username };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
 
 function esc(text) {
   return String(text ?? '').replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
