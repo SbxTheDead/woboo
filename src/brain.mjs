@@ -119,14 +119,23 @@ reporting back. Plan for that shape:
 - Use "computer" steps for anything that happens on the owner's screen. Woboo
   looks at the display and drives the real mouse and keyboard. State the goal,
   not the clicks — it works out where to click by looking.
-  Choose "computer" whenever the task names an application, a window, or an
-  on-screen action: open/launch/click/type/browse/search/watch/play/log in, or
-  any app by name — Chrome, Edge, VS Code, Word, Spotify, Explorer, Settings.
-  "Open Chrome and search for X" is a computer step. Do NOT quietly turn it into
-  a shell command that fetches the same information invisibly: the owner asked to
-  see their machine used, and a background HTTP request is not that.
+  Choose "computer" when the task is about the machine itself and nothing else
+  can reach it: a desktop application by name — VS Code, Word, Spotify,
+  Explorer, Settings, Task Manager — or the desktop, the Start menu, an
+  installer, a system dialog.
+  Do NOT choose "computer" for anything that lives on the web. Woboo drives a
+  browser through the page's own structure, which is roughly ten thousand times
+  faster than looking at the screen: measured on this machine, one DOM action
+  costs 16ms and one vision step 153 seconds. "Open Chrome and search for X",
+  "check the prices on that site", "read my Gmail" are all "web" steps. The
+  browser window is visibly open and visibly driven either way.
   Choose "shell" for work with no visible surface — files, git, builds, tests,
   installs — where a command is exact and verifiable.
+- Never fetch a web page with a shell command. Invoke-WebRequest, curl and wget
+  are not "browsing": they get one raw file, they cannot follow a search result,
+  they trip anti-bot pages, and the owner asked to see their machine used rather
+  than a silent HTTP request. If the information is on the web, it is a "web"
+  step, or a "research" step when the answer needs several sources.
   When a task could go either way, ask which the owner actually wants to happen:
   if they said "open", they want the window open.
 - Write every shell command for the platform's real shell. On win32 that is
@@ -278,6 +287,31 @@ async function askAnthropic({ prompt, schema, maxTokens = 16_000, system = SYSTE
   }
 }
 
+// A plan that fetches a web page with a shell command is the wrong plan.
+//
+// The system prompt says so, the owner's stance says so, and the model does it
+// anyway — Invoke-WebRequest into a regex against raw HTML, which gets one file,
+// cannot follow a search result, trips anti-bot pages, and is invisible to an
+// owner who asked to watch their machine being used. Prompting harder does not
+// fix something a model will do one time in three. Rewriting the step does.
+const FETCHES_A_PAGE =
+  /\b(Invoke-WebRequest|Invoke-RestMethod|iwr|irm|curl|wget)\b[^\n]*\bhttps?:\/\/(?!localhost|127\.0\.0\.1)/i;
+
+export function redirectWebFetches(plan) {
+  if (!Array.isArray(plan?.steps)) return plan;
+  for (const step of plan.steps) {
+    if (step.kind !== 'shell' || !FETCHES_A_PAGE.test(step.instruction || '')) continue;
+    const url = (step.instruction.match(/https?:\/\/[^\s'"<>)]+/) || [])[0] || '';
+    record('brain', `rewrote a shell fetch of ${url || 'a web page'} into a browser step`, { level: 'warn' });
+    step.kind = 'web';
+    step.instruction = `Open ${url || 'the page named in this task'} and find: ${step.title}. Read what the page actually says and report it.`;
+    // The browser step reports what it saw; there is no file for a command to
+    // check, and the old verify was written against one.
+    step.verify = '';
+  }
+  return plan;
+}
+
 export async function plan({ task, workspace, crew, memory = '' }) {
   const prefer = loadSettings().prefer || 'auto';
   const stance =
@@ -297,7 +331,9 @@ export async function plan({ task, workspace, crew, memory = '' }) {
     .join('\n\n');
 
   if (provider() === 'nim') {
-    return nim.plan({ task, workspace, crew, memory, toolbox, stance, schema: PLAN_SCHEMA, system: SYSTEM });
+    return redirectWebFetches(
+      await nim.plan({ task, workspace, crew, memory, toolbox, stance, schema: PLAN_SCHEMA, system: SYSTEM }),
+    );
   }
   const prompt = `Owner's task:
 ${task}
@@ -333,7 +369,7 @@ Produce the plan.`;
     level: 'ok',
     usage: usage && { in: usage.input_tokens, out: usage.output_tokens },
   });
-  return data;
+  return redirectWebFetches(data);
 }
 
 // A structured answer to any question, whichever brain is in charge. The
