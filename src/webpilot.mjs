@@ -56,6 +56,10 @@ list of everything interactive on it. Choose ONE next action.
 - Elements marked "below" are further down the page. You can still click them;
   the page scrolls to them first. Do not scroll just to reach one.
 - Type into a field, then "submit" to send it — that presses Enter properly.
+- A field that turns entries into chips or tags — mail recipients, label pickers,
+  anything that shows what you typed as a little block — needs "submit" straight
+  after the "type", or the application discards it when focus moves on. An email
+  addressed to nobody looks exactly like a success until it is sent.
 - When the page already answers the goal, use "read": the text you were given is
   what a person would see, so quote from it rather than clicking further.
 - Use "done" the moment the goal is met, with a plain summary in text.

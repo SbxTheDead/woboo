@@ -26,9 +26,16 @@ export const APPS = {
   gmail: {
     name: 'Gmail',
     match: /\b(gmail|google mail|my email|send an? email)\b/i,
-    web: 'https://mail.google.com',
+    // Straight to a compose window. Clicking the Compose button is unreliable —
+    // it is a div in a framework that does not always act on a dispatched
+    // click — and this URL opens the same window every time.
+    web: 'https://mail.google.com/mail/u/0/#inbox?compose=new',
     api: { name: 'Gmail API', base: 'https://gmail.googleapis.com/gmail/v1', secret: 'googleOAuth' },
-    hint: 'Compose is the button top-left. Recipient goes in the "To" field, then Subject, then the body. Send is bottom-left.',
+    hint:
+      'To write an email, go straight to https://mail.google.com/mail/u/0/#inbox?compose=new — that opens the ' +
+      'compose window without clicking anything. Fill "To recipients", then "Subject", then "Message Body". ' +
+      'After typing an address, SUBMIT that field to turn it into a chip: Gmail throws away an address that was ' +
+      'never committed, so the mail would send to nobody. "Send" is the blue button at the bottom.',
   },
   outlook: {
     name: 'Outlook',
