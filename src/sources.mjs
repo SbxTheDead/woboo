@@ -61,6 +61,73 @@ export function authority(url) {
   return 1;
 }
 
+// ── SSRF screen ─────────────────────────────────────────────────────────────
+// Search results are arbitrary URLs chosen by somebody else's page. Fetching
+// them unchecked lets a result aim Woboo's network access at the machine
+// itself — the dashboard on 127.0.0.1, the router on 192.168.x, cloud metadata
+// on 169.254.169.254. Only a public http(s) target is worth a fetch.
+//
+// The WHATWG URL parser normalises odd IPv4 spellings (`0x7f.1`, `2130706433`)
+// to dotted quads before this ever sees them, so checking the dotted form is
+// enough. What this cannot see is a public name whose DNS answers with a
+// private address — closing that takes a resolver, not a regex.
+
+function privateIp4(host) {
+  const parts = host.split('.');
+  if (parts.length !== 4) return false;
+  const numbers = parts.map(Number);
+  if (!numbers.every((n) => Number.isInteger(n) && n >= 0 && n <= 255)) return false;
+  const [a, b] = numbers;
+  return (
+    a === 0 || // "this" network
+    a === 10 || // RFC1918
+    a === 127 || // loopback
+    (a === 100 && b >= 64 && b <= 127) || // carrier-grade NAT
+    (a === 169 && b === 254) || // link-local
+    (a === 172 && b >= 16 && b <= 31) || // RFC1918
+    (a === 192 && b === 168) || // RFC1918
+    a >= 224 // multicast and reserved
+  );
+}
+
+export function isPublicHost(host) {
+  const name = String(host).toLowerCase();
+  if (!name || name === 'localhost' || name.endsWith('.localhost') || name.endsWith('.internal') || name.endsWith('.local')) {
+    return false;
+  }
+  // IPv6 literals arrive in brackets. Loopback, "unspecified", link-local
+  // (fe80::/10) and unique-local (fc00::/7) are all out.
+  const bare = name.replace(/^\[|\]$/g, '');
+  if (bare.includes(':')) {
+    if (bare === '::1' || bare === '::') return false;
+    const first = bare.split(':')[0];
+    if (/^fe[89ab]/.test(first) || /^f[cd]/.test(first)) return false;
+    // An IPv4-mapped address is judged by the IPv4 it maps to — dotted in a
+    // hand-written literal, two hex hextets after WHATWG normalisation.
+    const dotted = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(bare);
+    if (dotted) return !privateIp4(dotted[1]);
+    const hextets = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(bare);
+    if (hextets) {
+      const high = parseInt(hextets[1], 16);
+      const low = parseInt(hextets[2], 16);
+      return !privateIp4(`${high >> 8}.${high & 255}.${low >> 8}.${low & 255}`);
+    }
+    return true;
+  }
+  return !privateIp4(bare);
+}
+
+export function isPublicUrl(url) {
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+  return isPublicHost(parsed.hostname);
+}
+
 // Tavily is a search API built for agents: it ranks by relevance to the query
 // and hands back the extracted article text. That second part matters as much as
 // the first — scraping got 403s from worldwildlife.org and timed out on IUCN
@@ -97,7 +164,7 @@ async function searchTavily(query, limit) {
       } catch {
         continue;
       }
-      if (seen.has(host) || SKIP.test(result.url)) continue;
+      if (seen.has(host) || SKIP.test(result.url) || !isPublicUrl(result.url)) continue;
       const rank = authority(result.url);
       if (rank === 0) continue;
       seen.add(host);
@@ -135,7 +202,7 @@ export async function search(query, { limit = 8 } = {}) {
     const hits = [];
     for (const match of html.matchAll(/uddg=([^&"']+)/g)) {
       const link = decodeURIComponent(match[1]);
-      if (!/^https?:/i.test(link) || SKIP.test(link)) continue;
+      if (!/^https?:/i.test(link) || SKIP.test(link) || !isPublicUrl(link)) continue;
       const host = new URL(link).hostname.replace(/^www\./, '');
       // One page per site: ten pages from one domain is not several sources.
       if (seen.has(host)) continue;
@@ -176,6 +243,10 @@ export function htmlToText(html) {
 // Short by design: a slow source is not worth a long wait when there are a
 // dozen others in the queue.
 export async function fetchSource(hit, { timeout = 9000 } = {}) {
+  // The screen, again, right before the request: a hit can also arrive from
+  // somewhere other than search(), and the network is where refusal counts.
+  if (!isPublicUrl(hit.url)) return null;
+
   // The search API already extracted this one. Skipping the round trip is the
   // difference between reading a source and losing it to a 403.
   if (hit.content && hit.content.length > 600) {

@@ -193,7 +193,7 @@ export async function runMission(task, { workspace } = {}) {
         ? `All ${mission.steps.length} steps done, ${checked} proven by a command.`
         : `All ${mission.steps.length} steps done.`;
 
-      let shortfall = acceptance.obviousShortfall(artifacts);
+      let shortfall = acceptance.obviousShortfall(artifacts, mission.understanding?.deliverables);
       let verdicts = [];
 
       if (!shortfall && mission.understanding && brain.hasCredentials()) {
@@ -503,22 +503,22 @@ async function runStep(i, { cwd, member, task }) {
       // owner cannot see at a glance.
       if (!sources.length) {
         const wanted = patterns.length ? patterns.join(', ') : 'anything from the earlier steps';
-        return {
+        work = {
           ok: false,
           out:
             `Nothing to write from. This step was meant to build a document out of ${wanted}, ` +
             `and there is no material there — the step that was supposed to gather it did not produce any. ` +
             `Writing something anyway would mean a document about whatever else happens to be in the folder.`,
         };
+      } else {
+        const out = String(instruction).match(/([-\w./\\]+\.html?)\b/i)?.[1];
+        work = await scribe.compose({
+          instruction,
+          sources,
+          outFile: path.resolve(cwd, out && !sources.some((s) => s.file.endsWith(out)) ? out : 'report.html'),
+          write: brain.write,
+        });
       }
-
-      const out = String(instruction).match(/([-\w./\\]+\.html?)\b/i)?.[1];
-      work = await scribe.compose({
-        instruction,
-        sources,
-        outFile: path.resolve(cwd, out && !sources.some((s) => s.file.endsWith(out)) ? out : 'report.html'),
-        write: brain.write,
-      });
     } else if (step.kind === 'inspect') {
       const shot = await eyes.screenshot({ reason: step.title });
       work = { ok: shot.ok, out: shot.ok ? `screen captured (${shot.size || 'ok'})` : shot.error };
@@ -699,7 +699,7 @@ async function runStep(i, { cwd, member, task }) {
   return false;
 }
 
-// Used by `wobo selftest`: a fixed mission that exercises plan → run → verify →
+// Used by `woboo selftest`: a fixed mission that exercises plan → run → verify →
 // report without a brain, a crew tool, or anything to break.
 export async function selfTest() {
   if (running) throw new Error('Woboo is busy.');

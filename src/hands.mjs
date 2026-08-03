@@ -20,7 +20,7 @@ const MOUSE_SHIM = `
 Add-Type @"
 using System;
 using System.Runtime.InteropServices;
-public class WoboMouse {
+public class WobooMouse {
   [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
   [DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint dx, uint dy, uint data, int extra);
 }
@@ -165,7 +165,7 @@ const KEY_SHIM = `
 Add-Type @"
 using System;
 using System.Runtime.InteropServices;
-public class WoboKeys {
+public class WobooKeys {
   [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, int extra);
 }
 "@
@@ -187,16 +187,16 @@ export async function pressKey(combo) {
 
   // Modifiers down, key down, key up, modifiers up — in that order, or the
   // combination is never actually held.
-  const down = parsed.mods.map((vk) => `[WoboKeys]::keybd_event(${vk}, 0, 0, 0)`).join('\n');
-  const up = [...parsed.mods].reverse().map((vk) => `[WoboKeys]::keybd_event(${vk}, 0, 2, 0)`).join('\n');
+  const down = parsed.mods.map((vk) => `[WobooKeys]::keybd_event(${vk}, 0, 0, 0)`).join('\n');
+  const up = [...parsed.mods].reverse().map((vk) => `[WobooKeys]::keybd_event(${vk}, 0, 2, 0)`).join('\n');
 
   const source = `
 $ErrorActionPreference = 'Stop'
 ${KEY_SHIM}
 ${down}
-[WoboKeys]::keybd_event(${parsed.main}, 0, 0, 0)
+[WobooKeys]::keybd_event(${parsed.main}, 0, 0, 0)
 Start-Sleep -Milliseconds 40
-[WoboKeys]::keybd_event(${parsed.main}, 0, 2, 0)
+[WobooKeys]::keybd_event(${parsed.main}, 0, 2, 0)
 ${up}
 Write-Output pressed
 `;
@@ -220,15 +220,15 @@ export async function click(x, y, { button = 'left', count = 1 } = {}) {
   const [down, up] = BUTTONS[button] || BUTTONS.left;
   const pulses = Array.from(
     { length: times },
-    () => `[WoboMouse]::mouse_event(${down}, 0, 0, 0, 0)
-[WoboMouse]::mouse_event(${up}, 0, 0, 0, 0)
+    () => `[WobooMouse]::mouse_event(${down}, 0, 0, 0, 0)
+[WobooMouse]::mouse_event(${up}, 0, 0, 0, 0)
 Start-Sleep -Milliseconds 30`,
   ).join('\n');
 
   const source = `
 $ErrorActionPreference = 'Stop'
 ${MOUSE_SHIM}
-[WoboMouse]::SetCursorPos(${Number(x) | 0}, ${Number(y) | 0})
+[WobooMouse]::SetCursorPos(${Number(x) | 0}, ${Number(y) | 0})
 Start-Sleep -Milliseconds 40
 ${pulses}
 Write-Output clicked
@@ -249,8 +249,8 @@ export async function mouseDown(x, y, { button = 'left' } = {}) {
   const result = await script(
     `$ErrorActionPreference = 'Stop'
 ${MOUSE_SHIM}
-[WoboMouse]::SetCursorPos(${Number(x) | 0}, ${Number(y) | 0})
-[WoboMouse]::mouse_event(${down}, 0, 0, 0, 0)
+[WobooMouse]::SetCursorPos(${Number(x) | 0}, ${Number(y) | 0})
+[WobooMouse]::mouse_event(${down}, 0, 0, 0, 0)
 Write-Output down`,
     { action: 'press mouse' },
   );
@@ -264,8 +264,8 @@ export async function mouseUp(x, y, { button = 'left' } = {}) {
   const result = await script(
     `$ErrorActionPreference = 'Stop'
 ${MOUSE_SHIM}
-[WoboMouse]::SetCursorPos(${Number(x) | 0}, ${Number(y) | 0})
-[WoboMouse]::mouse_event(${up}, 0, 0, 0, 0)
+[WobooMouse]::SetCursorPos(${Number(x) | 0}, ${Number(y) | 0})
+[WobooMouse]::mouse_event(${up}, 0, 0, 0, 0)
 Write-Output up`,
     { action: 'release mouse' },
   );
@@ -284,18 +284,18 @@ export async function dragTo(from, to, { button = 'left' } = {}) {
     const t = (i + 1) / steps;
     const x = Math.round(from[0] + (to[0] - from[0]) * t);
     const y = Math.round(from[1] + (to[1] - from[1]) * t);
-    return `[WoboMouse]::SetCursorPos(${x}, ${y})
+    return `[WobooMouse]::SetCursorPos(${x}, ${y})
 Start-Sleep -Milliseconds 16`;
   }).join('\n');
 
   const result = await script(
     `$ErrorActionPreference = 'Stop'
 ${MOUSE_SHIM}
-[WoboMouse]::SetCursorPos(${from[0] | 0}, ${from[1] | 0})
+[WobooMouse]::SetCursorPos(${from[0] | 0}, ${from[1] | 0})
 Start-Sleep -Milliseconds 40
-[WoboMouse]::mouse_event(${down}, 0, 0, 0, 0)
+[WobooMouse]::mouse_event(${down}, 0, 0, 0, 0)
 ${glide}
-[WoboMouse]::mouse_event(${up}, 0, 0, 0, 0)
+[WobooMouse]::mouse_event(${up}, 0, 0, 0, 0)
 Write-Output dragged`,
     { action: 'drag', timeout: 45_000 },
   );
@@ -320,14 +320,14 @@ export async function scroll(x, y, direction = 'down', amount = 3) {
 
   const pulses = Array.from(
     { length: clicks },
-    () => `[WoboMouse]::mouse_event(${flag}, 0, 0, ${unsigned}, 0)
+    () => `[WobooMouse]::mouse_event(${flag}, 0, 0, ${unsigned}, 0)
 Start-Sleep -Milliseconds 25`,
   ).join('\n');
 
   const result = await script(
     `$ErrorActionPreference = 'Stop'
 ${MOUSE_SHIM}
-[WoboMouse]::SetCursorPos(${Number(x) | 0}, ${Number(y) | 0})
+[WobooMouse]::SetCursorPos(${Number(x) | 0}, ${Number(y) | 0})
 Start-Sleep -Milliseconds 30
 ${pulses}
 Write-Output scrolled`,
@@ -353,7 +353,7 @@ export async function showCursor(x, y) {
   const source = `
 $ErrorActionPreference = 'Stop'
 ${MOUSE_SHIM}
-[WoboMouse]::SetCursorPos(${Number(x) | 0}, ${Number(y) | 0})
+[WobooMouse]::SetCursorPos(${Number(x) | 0}, ${Number(y) | 0})
 `;
   const result = await script(source, { action: 'show pointer', quiet: true }).catch(() => ({ ok: false }));
   return { ok: Boolean(result.ok) };
@@ -366,7 +366,7 @@ export async function moveTo(x, y) {
   const source = `
 $ErrorActionPreference = 'Stop'
 ${MOUSE_SHIM}
-[WoboMouse]::SetCursorPos(${Number(x) | 0}, ${Number(y) | 0})
+[WobooMouse]::SetCursorPos(${Number(x) | 0}, ${Number(y) | 0})
 Write-Output moved
 `;
   const result = await script(source, { action: 'move pointer' });
@@ -384,15 +384,15 @@ $ErrorActionPreference = 'Stop'
 Add-Type @"
 using System;
 using System.Runtime.InteropServices;
-public class WoboWin {
+public class WobooWin {
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
   [DllImport("user32.dll")] public static extern bool ShowWindowAsync(IntPtr h, int cmd);
 }
 "@
 $match = Get-Process | Where-Object { $_.MainWindowTitle -like '*${psLiteral(titleFragment)}*' } | Select-Object -First 1
 if ($null -eq $match) { Write-Output 'no window'; exit 1 }
-[WoboWin]::ShowWindowAsync($match.MainWindowHandle, 9) | Out-Null
-[WoboWin]::SetForegroundWindow($match.MainWindowHandle) | Out-Null
+[WobooWin]::ShowWindowAsync($match.MainWindowHandle, 9) | Out-Null
+[WobooWin]::SetForegroundWindow($match.MainWindowHandle) | Out-Null
 Write-Output $match.MainWindowTitle
 `;
   const result = await script(source, { action: 'focus window' });

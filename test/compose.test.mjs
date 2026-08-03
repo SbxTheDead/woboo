@@ -8,7 +8,7 @@
 //
 // A document that looks finished and is about the wrong thing is the one
 // failure an owner cannot see at a glance. Refusing is the correct answer.
-import test from 'node:test';
+import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -50,4 +50,58 @@ test('real material is accepted', () => {
   const usable = scribe.gather(workspace, ['emails.txt']).filter((s) => String(s.text || '').trim().length > 40);
   assert.equal(usable.length, 1);
   assert.match(usable[0].text, /higgsfield/);
+});
+
+test('a compose step with nothing to write from fails the step', async () => {
+  // The refusal did `return { ok: false, out }` from runStep, whose contract is
+  // a boolean — a truthy object, so the step was treated as SUCCEEDED: no
+  // failure recorded, no document produced, mission reported done.
+  const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'woboo-compose-empty-'));
+  try {
+    mock.module('../src/brain.mjs', {
+      namedExports: {
+        hasCredentials: () => true,
+        provider: () => 'anthropic',
+        getClient: () => null,
+        plan: async () => ({
+          summary: 'Write a document from material that does not exist',
+          understanding: {
+            asking_for: 'Summarise the support mailbox as a PDF',
+            deliverables: ['A PDF summarising the support thread'],
+            done_when: 'The owner has the PDF',
+            care_about: [],
+          },
+          steps: [
+            {
+              title: 'Write the summary',
+              kind: 'compose',
+              instruction: 'Write summary.html from support-emails.txt',
+              verify: '',
+            },
+          ],
+        }),
+        ask: async () => ({ verdicts: [], shortfall: '' }),
+        write: async () => '',
+        repair: async () => ({ diagnosis: '', instruction: '' }),
+        offlinePlan: () => ({ unplanned: true, summary: '', reason: 'test', steps: [] }),
+        unplannable: () => ({ unplanned: true, summary: '', reason: 'test', steps: [] }),
+      },
+    });
+    mock.module('../src/crew.mjs', {
+      namedExports: { pick: async () => null, delegate: async () => ({ ok: false, out: '' }) },
+    });
+    mock.module('../src/memory.mjs', {
+      namedExports: { recall: () => '', learnFromMission: () => {}, learnFromRepair: () => {} },
+    });
+
+    const { runMission } = await import('../src/foreman.mjs');
+    const mission = await runMission('Summarise the support mailbox', { workspace: empty });
+
+    assert.equal(mission.steps[0].status, 'failed', 'the refusal must fail the step, not return a truthy object');
+    assert.match(mission.steps[0].output, /Nothing to write from/);
+    assert.equal(mission.state, 'failed', 'a refused compose step must not be reported as success');
+    assert.match(mission.report, /Stopped at step 1/);
+  } finally {
+    fs.rmSync(empty, { recursive: true, force: true });
+  }
 });

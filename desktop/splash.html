@@ -109,7 +109,7 @@
 
 <div class="card">
   <div class="head" id="head">
-    <img src="../assets/wobo.png" alt="Woboo">
+    <img src="../assets/woboo.png" alt="Woboo">
     <div class="antenna"></div>
   </div>
 
@@ -132,14 +132,14 @@
     return String(t == null ? '' : t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
-  window.wobo.onFace(function (painted) {
+  window.woboo.onFace(function (painted) {
     $('face').innerHTML = painted.svg;
     document.documentElement.style.setProperty('--fc', painted.color);
   });
 
   // Each line is a real check that just finished — the launcher is showing you
   // the boot, not animating a stand-in for it.
-  window.wobo.onBoot(function (step) {
+  window.woboo.onBoot(function (step) {
     if (step.done) {
       $('foot').textContent = 'ready';
       $('bar').style.width = '100%';
@@ -158,7 +158,7 @@
     while ($('steps').childElementCount > 7) $('steps').removeChild($('steps').firstElementChild);
   });
 
-  window.wobo.snapshot().then(function (snap) {
+  window.woboo.snapshot().then(function (snap) {
     $('face-css').textContent = snap.css;
     $('face').setAttribute('viewBox', snap.viewBox);
   });

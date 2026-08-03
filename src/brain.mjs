@@ -317,7 +317,7 @@ export async function getClient() {
     return client;
   } catch (err) {
     clientError = new Error(
-      `brain unavailable: ${err.message}. Run "npm install" inside the wobo folder.`,
+      `brain unavailable: ${err.message}. Run "npm install" inside the woboo folder.`,
     );
     throw clientError;
   }
@@ -354,7 +354,7 @@ function anthropicCredentials() {
 
 export function installed() {
   try {
-    // Resolve without importing so `wobo doctor` can report before install.
+    // Resolve without importing so `woboo doctor` can report before install.
     import.meta.resolve?.('@anthropic-ai/sdk');
     return true;
   } catch {

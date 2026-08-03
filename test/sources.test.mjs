@@ -5,7 +5,7 @@
 // content farm and a peer-reviewed journal must not weigh the same.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { authority, keywords, selectPassages, htmlToText } from '../src/sources.mjs';
+import { authority, keywords, selectPassages, htmlToText, isPublicUrl } from '../src/sources.mjs';
 
 test('ranks a primary source above an aggregator above an unknown', () => {
   const nasa = authority('https://science.nasa.gov/mission/europa-clipper/');
@@ -95,4 +95,47 @@ test('script and style never reach the reader', () => {
   const text = htmlToText(html);
   assert.ok(text.includes('The actual sentence.'));
   assert.ok(!/alert|color:red/.test(text), 'page machinery was read as content');
+});
+
+test('the SSRF screen refuses anything that is not a public host', () => {
+  // A search result is somebody else's URL. Without this screen a result could
+  // aim Woboo's fetch at the dashboard on loopback, the router, or cloud
+  // instance metadata.
+  for (const url of [
+    'http://127.0.0.1:4477/api/state',
+    'http://localhost:4477/',
+    'http://[::1]/',
+    'http://10.0.0.4/internal',
+    'http://172.16.0.1/',
+    'http://172.31.255.255/',
+    'http://192.168.1.1/admin',
+    'http://169.254.169.254/latest/meta-data',
+    'http://[fe80::1]/',
+    'http://[fd00::1]/',
+    'http://[::ffff:127.0.0.1]/',
+    'http://printer.internal/',
+  ]) {
+    assert.equal(isPublicUrl(url), false, `${url} must never be fetched`);
+  }
+});
+
+test('the screen is not fooled by odd spellings or other schemes', () => {
+  // The WHATWG parser normalises these to 127.0.0.1 before the check runs.
+  for (const url of ['http://2130706433/', 'http://0x7f.1/']) {
+    assert.equal(isPublicUrl(url), false, `${url} is loopback in disguise`);
+  }
+  for (const url of ['file:///C:/Users/asus/secrets.txt', 'ftp://example.com/x', 'gopher://example.com/']) {
+    assert.equal(isPublicUrl(url), false, `${url} is not a web page`);
+  }
+});
+
+test('the screen lets real public sources through', () => {
+  for (const url of [
+    'https://en.wikipedia.org/wiki/Europa_Clipper',
+    'http://example.com/report',
+    'https://172.15.0.1/edge-case', // just outside 172.16/12 — public space
+    'https://172.32.0.1/edge-case',
+  ]) {
+    assert.equal(isPublicUrl(url), true, `${url} is an ordinary public address`);
+  }
 });

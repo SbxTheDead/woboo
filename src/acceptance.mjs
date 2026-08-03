@@ -105,10 +105,21 @@ export function evidenceFor(file) {
   }
 }
 
+// A deliverable that names a file, by extension ("summary.pdf") or by form
+// ("a PDF", "the document"). "The tests pass" and "the browser restarted"
+// name none — for those, producing no file is the correct outcome.
+const NAMES_A_FILE =
+  /[-\w]+\.(pdf|html?|txt|md|docx?|xlsx?|pptx?|csv|json|png|jpe?g|gif|zip)\b|\b(file|document|pdf|spreadsheet|presentation|screenshot|image|photo|picture)\b/i;
+
 // The obvious failures, caught without asking a model. These are cheap, certain,
 // and they are the ones that actually happened.
-export function obviousShortfall(artifacts) {
-  if (!artifacts.length) return 'no file was produced at all';
+export function obviousShortfall(artifacts, deliverables = []) {
+  if (!artifacts.length) {
+    // Only a failure when a file was actually owed. Judged against the
+    // deliverables, not the step count: "run the tests" and "restart the
+    // browser" produce no file, and were being reported failed for it.
+    return deliverables.some((d) => NAMES_A_FILE.test(d)) ? 'no file was produced at all' : null;
+  }
   for (const file of artifacts) {
     // Existence first, and for every kind of file. Checking it only while
     // reading text meant a missing PDF — the most likely thing to be missing,

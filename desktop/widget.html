@@ -238,21 +238,21 @@
     clearTimeout(collapseTimer);
     if (document.body.classList.contains('expanded')) return;
     document.body.classList.add('expanded');
-    window.wobo.mode('expanded');
+    window.woboo.mode('expanded');
   }
 
   function collapse() {
     // Never shrink out from under a mission, a pending approval, or typing.
     if (pinned || busy || approvals.length || document.activeElement === $('task')) return;
     document.body.classList.remove('expanded');
-    window.wobo.mode('compact');
+    window.woboo.mode('compact');
   }
 
   // The head is a drag region, and Chromium gives those to the window manager —
   // no mouse event reaches this document while you are over it. So the main
   // process watches the OS cursor and tells us. DOM events stay wired up too:
   // they fire fine over the panel, which is no-drag, and cost nothing.
-  window.wobo.onHover(function (inside) {
+  window.woboo.onHover(function (inside) {
     clearTimeout(collapseTimer);
     if (inside) expand();
     else collapseTimer = setTimeout(collapse, 500);
@@ -341,17 +341,17 @@
   function answer(decision) {
     var request = approvals[0];
     if (!request) return;
-    window.wobo.approve(request.id, decision);
+    window.woboo.approve(request.id, decision);
     approvals = approvals.filter(function (r) { return r.id !== request.id; });
     drawApprovals();
   }
 
   // ── wiring ────────────────────────────────────────────────────────────────
 
-  window.wobo.onFace(drawFace);
-  window.wobo.onToast(toast);
+  window.woboo.onFace(drawFace);
+  window.woboo.onToast(toast);
 
-  window.wobo.onEvent(function (event) {
+  window.woboo.onEvent(function (event) {
     if (event.type === 'mission') {
       drawMission(event.mission);
       var state = event.mission && event.mission.state;
@@ -378,17 +378,17 @@
     var text = $('task').value.trim();
     if (!text) return;
     $('task').value = '';
-    window.wobo.task(text);
+    window.woboo.task(text);
   }
 
   $('send').onclick = submit;
   $('task').onkeydown = function (e) { if (e.key === 'Enter') submit(); };
   $('task').onblur = function () { collapseTimer = setTimeout(collapse, 900); };
-  $('stop').onclick = function () { window.wobo.stop(); };
-  $('resume').onclick = function () { window.wobo.resume(); };
-  $('look').onclick = function () { window.wobo.look(); };
-  $('panel').onclick = function () { window.wobo.panel(); };
-  $('hide').onclick = function () { window.wobo.hide(); };
+  $('stop').onclick = function () { window.woboo.stop(); };
+  $('resume').onclick = function () { window.woboo.resume(); };
+  $('look').onclick = function () { window.woboo.look(); };
+  $('panel').onclick = function () { window.woboo.panel(); };
+  $('hide').onclick = function () { window.woboo.hide(); };
   $('ap-allow').onclick = function () { answer('allow'); };
   $('ap-deny').onclick = function () { answer('deny'); };
   document.addEventListener('keydown', function (e) {
@@ -396,7 +396,7 @@
   });
 
   // Cold start: ask the body what it is doing and draw that.
-  window.wobo.snapshot().then(function (snap) {
+  window.woboo.snapshot().then(function (snap) {
     $('face-css').textContent = snap.css;
     $('face').setAttribute('viewBox', snap.viewBox);
     drawFace(snap.face);

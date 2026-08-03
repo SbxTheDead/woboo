@@ -60,7 +60,12 @@ const DEFAULTS = {
   effort: 'high',
   // Which installed coding tool Woboo delegates to. 'auto' picks the first found.
   crew: 'auto',
-  // Where missions run. null means "wherever wobo was started from".
+  // How much reach the delegated coding tool gets. 'guarded' briefs it with the
+  // most restrictive flags that still let it work (Claude Code: acceptEdits with
+  // destructive shell patterns denied; Codex: a workspace-write sandbox). 'full'
+  // hands it the owner's whole session — bypassPermissions / danger-full-access.
+  crewTrust: 'guarded',
+  // Where missions run. null means "wherever woboo was started from".
   workspace: null,
   // How much rope the hands get: 'ask' (owner confirms each act), 'allow', 'off'.
   hands: 'ask',

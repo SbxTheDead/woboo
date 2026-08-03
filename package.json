@@ -1,5 +1,5 @@
 {
-  "name": "wobo",
+  "name": "woboo",
   "version": "0.1.0",
   "private": true,
   "description": "A body for your AI. Give Woboo a task; it operates your PC, drives your coding tools, and tests the work before handing it back.",
@@ -7,19 +7,20 @@
   "license": "MIT",
   "type": "module",
   "bin": {
-    "wobo": "./wobo.mjs"
+    "woboo": "./woboo.mjs",
+    "wobo": "./woboo.mjs"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
-    "start": "node wobo.mjs widget",
+    "start": "node woboo.mjs widget",
     "widget": "electron desktop/main.mjs",
-    "panel": "node wobo.mjs up",
-    "doctor": "node wobo.mjs doctor",
-    "selftest": "node wobo.mjs selftest",
-    "test": "node --test --test-concurrency=1 \"test/*.test.mjs\"",
-    "test:live": "node --test --test-concurrency=1 \"test/*.test.mjs\" \"test/live/*.test.mjs\""
+    "panel": "node woboo.mjs up",
+    "doctor": "node woboo.mjs doctor",
+    "selftest": "node woboo.mjs selftest",
+    "test": "node --experimental-test-module-mocks --test --test-concurrency=1 \"test/*.test.mjs\"",
+    "test:live": "node --experimental-test-module-mocks --test --test-concurrency=1 \"test/*.test.mjs\" \"test/live/*.test.mjs\""
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.72.0"

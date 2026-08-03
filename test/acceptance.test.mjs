@@ -28,8 +28,18 @@ test('a file that was reported but never written is caught', () => {
   assert.match(obviousShortfall([path.join(dir, 'never-created.pdf')]) || '', /not on disk/i);
 });
 
-test('producing nothing at all is caught', () => {
-  assert.match(obviousShortfall([]) || '', /no file/i);
+test('producing nothing at all is caught when a file was owed', () => {
+  assert.match(obviousShortfall([], ['A PDF summarising the support thread']) || '', /no file/i);
+  assert.match(obviousShortfall([], ['The summary in summary.pdf']) || '', /no file/i);
+});
+
+test('producing no file is fine when no file was asked for', () => {
+  // "Run the tests", "restart the browser", a question answered in chat — these
+  // legitimately end with zero artifacts and were always reported failed.
+  assert.equal(obviousShortfall([], []), null);
+  assert.equal(obviousShortfall([], ['The test suite passing']), null);
+  assert.equal(obviousShortfall([], ['The browser restarted with the profile loaded']), null);
+  assert.equal(obviousShortfall([], ['An answer to the question, in chat']), null);
 });
 
 test('a real document passes the cheap checks', () => {
@@ -58,7 +68,7 @@ test('evidence says plainly when a file is not there', () => {
 test('the wrong subject fails even when every step passed', async () => {
   // The exact failure: asked for a summary of a support mailbox, handed a
   // well-formed document about a project's package manifest.
-  const wrong = file('support_summary.html', '<html><body><pre>Project wobo version 0.1.0. Dependency: electron.</pre></body></html>');
+  const wrong = file('support_summary.html', '<html><body><pre>Project woboo version 0.1.0. Dependency: electron.</pre></body></html>');
 
   const asked = [];
   const result = await check({
@@ -79,7 +89,7 @@ test('the wrong subject fails even when every step passed', async () => {
   assert.equal(result.met, false);
   assert.match(result.shortfall, /support/i);
   // The judgement is only as good as what it was shown.
-  assert.match(asked[0], /package manifest|wobo version/i, 'the evidence must include what the file actually says');
+  assert.match(asked[0], /package manifest|woboo version/i, 'the evidence must include what the file actually says');
   assert.match(asked[0], /support@higgsfield\.ai/, 'and what was asked for');
 });
 

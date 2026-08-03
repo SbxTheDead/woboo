@@ -29,8 +29,8 @@ checks the finished work against that list.
 
 ```bash
 npm install
-node wobo.mjs setup      # keys, phone, browser — asks only for what is missing
-node wobo.mjs widget     # the desktop companion
+node woboo.mjs setup      # keys, phone, browser — asks only for what is missing
+node woboo.mjs widget     # the desktop companion
 ```
 
 `setup` walks through what Woboo needs and skips whatever is already there.
@@ -43,7 +43,7 @@ Everything is optional except a brain.
 | **Your phone** | A bot token from [@BotFather](https://t.me/BotFather). Send tasks and answer questions from anywhere. |
 | **Accounts** | `woboo browser signin` — sign in once in Woboo's own browser profile and it stays signed in. |
 
-Needs **Node 20+**. Mouse and keyboard are Windows-only; everything else runs
+Needs **Node 22+**. Mouse and keyboard are Windows-only; everything else runs
 anywhere Node does.
 
 ---
@@ -71,7 +71,7 @@ intake → understand → plan → do → verify → repair → accept → repor
   nothing was checkable.
 
 ```bash
-npm test             # 59 unit tests
+npm test             # 89 unit tests
 npm run test:live    # drives a real Chrome
 npm run selftest     # a step that must pass and one that must fail
 ```
@@ -127,6 +127,9 @@ woboo set [key] [value]  show or change settings
 woboo key                the dashboard URL with the owner key
 ```
 
+Installed as a package, the CLI answers to both `woboo` and `wobo` — the old
+name is kept as an alias so existing scripts and muscle memory keep working.
+
 ---
 
 ## Settings
@@ -142,6 +145,7 @@ woboo key                the dashboard URL with the owner key
 | `maxRepairs` | `2` | attempts before a step is given up on |
 | `port` | `4477` | the local dashboard |
 | `allowCommands` | `[]` | extra commands allowed without asking |
+| `crewTrust` | `guarded` | `full` lets the delegated coding tool bypass its permission prompts |
 | `visibleCursor` | `false` | move the real pointer to where it clicks |
 
 ---
@@ -172,6 +176,14 @@ rather than advisory.
 - **The dashboard is loopback-only**, behind an owner key compared in constant
   time. Secrets are written with inheritance removed and access granted only to
   you.
+- **Delegated coding is fenced by the tool's own flags, not just trusted.** A
+  `delegate` step hands work to an installed coding CLI, and that CLI answers to
+  its own permission system — Woboo's allowlist cannot see inside it. So the
+  brief goes out with the most restrictive flags that still let the tool work:
+  Claude Code runs in `acceptEdits` mode with destructive shell patterns denied,
+  Codex runs in a `workspace-write` sandbox. Setting `crewTrust` to `full`
+  lifts the fence (`bypassPermissions` / `danger-full-access`) — that is the
+  owner's call to make, never a default.
 
 ---
 

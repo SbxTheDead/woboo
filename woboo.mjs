@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // Woboo's front door.
 //
-//   wobo up          start the dashboard and leave it running
-//   wobo run "…"     one mission, in this terminal, exit code says how it went
-//   wobo doctor      what works on this machine and what does not
+//   woboo up          start the dashboard and leave it running
+//   woboo run "…"     one mission, in this terminal, exit code says how it went
+//   woboo doctor      what works on this machine and what does not
 //
 // The CLI and the dashboard drive exactly the same modules — the browser is a
 // second face on one body, never a second implementation.
@@ -46,7 +46,7 @@ function say(text = '') {
 }
 
 const BANNER = `${bold(green('  ▄▄   ▄▄  '))}
-${bold(green(' ( o   o ) '))}  ${bold('wobo')} ${dim('— a body for your AI')}
+${bold(green(' ( o   o ) '))}  ${bold('woboo')} ${dim('— a body for your AI')}
 ${bold(green('  \\  ‾  /  '))}
 `;
 
@@ -226,6 +226,14 @@ async function cmdBrowser(args, flags) {
   const { browserPath } = await import('./src/toolbox.mjs');
   const { script } = await import('./src/ps.mjs');
 
+  // The scripts below run through ps.mjs, which hands the source to
+  // powershell.exe as a single argv entry — no shell ever re-reads it. But
+  // PowerShell itself still parses the string, and the profile path goes in
+  // twice: a user named `o'hara` breaks a single-quoted string, and one named
+  // `a[b]` turns a -like pattern into a wildcard match on the wrong processes.
+  const psLiteral = (value) => String(value).replace(/'/g, "''");
+  const psPattern = (value) => psLiteral(value).replace(/[`[\]*?]/g, '`$&');
+
   const exe = browserPath();
   const which = exe && /chrome\.exe$/i.test(exe) ? 'Chrome' : 'Edge';
 
@@ -246,7 +254,7 @@ async function cmdBrowser(args, flags) {
 
   if (args[0] === 'reset') {
     await browser.close().catch(() => {});
-    await script(`Remove-Item -LiteralPath '${browser.profileDir()}' -Recurse -Force -ErrorAction SilentlyContinue`, {
+    await script(`Remove-Item -LiteralPath '${psLiteral(browser.profileDir())}' -Recurse -Force -ErrorAction SilentlyContinue`, {
       action: 'reset browser profile',
       timeout: 30_000,
     });
@@ -259,7 +267,7 @@ async function cmdBrowser(args, flags) {
     await browser.close().catch(() => {});
     await script(
       `Get-CimInstance Win32_Process -Filter "Name='${which === 'Chrome' ? 'chrome.exe' : 'msedge.exe'}'" | ` +
-        `Where-Object { $_.CommandLine -like '*${browser.profileDir().replace(/\\/g, '\\')}*' } | ` +
+        `Where-Object { $_.CommandLine -like '*${psPattern(browser.profileDir())}*' } | ` +
         `ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`,
       { action: 'close browser', timeout: 20_000 },
     );
@@ -278,19 +286,19 @@ async function cmdBrowser(args, flags) {
     say(dim(`  ${state.error}`));
   }
   say('');
-  say(dim('  woboo browser signin [url]  open it so you can sign in to an account'));
-  say(dim('  woboo browser reset         wipe the profile and sign out of everything'));
-  say(dim('  woboo browser --restart     reopen the browser with debugging enabled'));
+  say(dim('  woboo  browser signin [url]  open it so you can sign in to an account'));
+  say(dim('  woboo  browser reset         wipe the profile and sign out of everything'));
+  say(dim('  woboo  browser --restart     reopen the browser with debugging enabled'));
   return 0;
 }
 
 // Reachable from your phone. Long polling, so no public URL and no inbound port.
 async function cmdTelegram() {
   const secrets = loadSecrets();
-  const token = secrets.telegramToken || process.env.WOBO_TELEGRAM_TOKEN;
+  const token = secrets.telegramToken || process.env.WOBOO_TELEGRAM_TOKEN || process.env.WOBO_TELEGRAM_TOKEN;
   if (!token) {
     say(red('  no Telegram token stored.'));
-    say(dim('  get one from @BotFather, then: wobo secret telegram <token>'));
+    say(dim('  get one from @BotFather, then: woboo secret telegram <token>'));
     return 2;
   }
 
@@ -349,8 +357,8 @@ async function cmdNim(args) {
     }
   }
   say('');
-  say(dim('  woboo nim <model-id>   point Woboo at one'));
-  say(dim('  woboo nim list         every model NIM hosts'));
+  say(dim('  woboo  nim <model-id>   point Woboo at one'));
+  say(dim('  woboo  nim list         every model NIM hosts'));
   return 0;
 }
 
@@ -422,7 +430,7 @@ async function cmdWidget() {
   }
   if (typeof electron !== 'string') {
     say(red('  the widget needs Electron.'));
-    say(dim('  run `npm install` inside the wobo folder, then try again.'));
+    say(dim('  run `npm install` inside the woboo folder, then try again.'));
     return 1;
   }
 
@@ -432,7 +440,7 @@ async function cmdWidget() {
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE;
 
-  say(dim('  wobo is on your desktop — drag the head to move it, hover to open the panel.'));
+  say(dim('  woboo is on your desktop — drag the head to move it, hover to open the panel.'));
   const child = spawn(electron, [entry], { stdio: 'inherit', windowsHide: false, env });
   return new Promise((resolve) => {
     child.on('error', (err) => {
@@ -445,7 +453,7 @@ async function cmdWidget() {
 
 async function cmdRun(task, flags) {
   if (!task) {
-    say(red('  give it a task: wobo run "add a health endpoint and test it"'));
+    say(red('  give it a task: woboo run "add a health endpoint and test it"'));
     return 2;
   }
 
@@ -499,7 +507,7 @@ async function cmdDoctor() {
   };
 
   const major = Number(process.versions.node.split('.')[0]);
-  check('node', major >= 20 ? 'ok' : 'bad', `v${process.versions.node}${major >= 20 ? '' : ' — Woboo needs 20+'}`);
+  check('node', major >= 22 ? 'ok' : 'bad', `v${process.versions.node}${major >= 22 ? '' : ' — Woboo needs 22+'}`);
   check('home', 'ok', PATHS.home);
 
   const sdk = brain.installed();
@@ -616,7 +624,7 @@ function cmdSet(key, value) {
     return 0;
   }
   if (!(key in loadSettings())) {
-    say(red(`  "${key}" is not a Woboo setting. Run \`wobo set\` to see them all.`));
+    say(red(`  "${key}" is not a Woboo setting. Run \`woboo set\` to see them all.`));
     return 2;
   }
 
@@ -658,7 +666,7 @@ async function cmdLook() {
 
 function help() {
   say(BANNER);
-  say(`  ${bold('usage')}  wobo <command> [options]`);
+  say(`  ${bold('usage')}  woboo <command> [options]`);
   say('');
   say(`  ${bold('setup')}              set Woboo up from scratch ${dim('(start here; --again to redo)')}`);
   say(`  ${bold('widget')}             put Woboo on your desktop ${dim('(the companion)')}`);
@@ -666,7 +674,7 @@ function help() {
   say(`  ${bold('telegram')}           reach Woboo from your phone`);
   say(`  ${bold('up')}                 start the browser panel ${dim('(--port N, --open)')}`);
   say(`  ${bold('memory')} [dir]       what Woboo remembers ${dim('(--all, --forget)')}`);
-  say(`  ${bold('secret')} <name> <v>  store the anthropic, nvidia or telegram key`);
+  say(`  ${bold('secret')} <name> <v>  store a key: anthropic, nvidia, telegram, tavily`);
   say(`  ${bold('nim')} [model|list]   use NVIDIA NIM as the brain ${dim('(free tier)')}`);
   say(`  ${bold('browser')} [signin]   Woboo's own browser profile ${dim('(reset, --restart)')}`);
   say(`  ${bold('run')} "<task>"       run one mission here ${dim('(--workspace DIR)')}`);
@@ -708,7 +716,7 @@ async function main() {
 
   if (flags.help || !command || command === 'help') return help();
 
-  // Credentials stored by `wobo secret` reach the SDK through the environment.
+  // Credentials stored by `woboo secret` reach the SDK through the environment.
   loadSecrets();
 
   switch (command) {
@@ -729,7 +737,7 @@ async function main() {
       const [name, ...value] = args;
       const known = { anthropic: 'anthropicApiKey', telegram: 'telegramToken', nvidia: 'nvidiaApiKey', tavily: 'tavilyApiKey' };
       if (!known[name]) {
-        say(red('  usage: wobo secret <anthropic|telegram> <value>'));
+        say(red('  usage: woboo secret <anthropic|nvidia|telegram|tavily> <value>'));
         return 2;
       }
       const raw = value.join(' ').trim();
@@ -757,7 +765,7 @@ async function main() {
       return cmdDoctor();
     case 'stop':
       say(red(`  STOP engaged: ${guard.engageStop(args.join(' ') || 'owner pressed STOP (cli)')}`));
-      say(dim('  release it with `wobo resume`.'));
+      say(dim('  release it with `woboo resume`.'));
       return 0;
     case 'resume':
       guard.clearStop();

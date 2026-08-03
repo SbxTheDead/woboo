@@ -8,6 +8,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { classifyCommand, engageStop, clearStop, isStopped, assertLive, onStop, Halted } from '../src/guard.mjs';
+import { PATHS } from '../src/config.mjs';
 
 const CASES = [
   // Reading the machine is free.
@@ -37,6 +38,28 @@ const CASES = [
   // Dot-sourcing executes a script; property access does not. One character
   // apart, and the classifier has to see the difference.
   ['. .\\payload.ps1', 'ask'],
+
+  // A type literal plus `::` invokes a static method with no cmdlet verb
+  // anywhere — the classifier used to skip every `[` segment and allow these.
+  ["[System.Diagnostics.Process]::Start('cmd','/c calc')", 'deny'],
+  ["[System.IO.File]::WriteAllText('D:\\wobo\\x.txt','y')", 'deny'],
+  // Casts and array indexing run nothing; they still sail through.
+  ['[char]65', 'allow'],
+  ['[int]$x', 'allow'],
+  ['$x[0]', 'allow'],
+
+  // Writing into the state directory is the agent editing its own allowlist,
+  // owner key and STOP latch — denied however allowlisted the verb. Both the
+  // `~` spelling and the expanded absolute path, either separator.
+  ['Set-Content ~/.woboo/settings.json "{\\"hands\\":\\"allow\\"}"', 'deny'],
+  ['Out-File ~\\.woboo\\owner.key', 'deny'],
+  ['echo "{}" > ~/.woboo/settings.json', 'deny'],
+  [`Set-Content ${PATHS.home}\\settings.json x`, 'deny'],
+  [`echo x > ${PATHS.home.replace(/\\/g, '/')}/secrets.json`, 'deny'],
+  // The same verbs aimed anywhere else stay allowlisted.
+  ['Set-Content D:\\wobo\\notes.txt "hi"', 'allow'],
+  ['echo hi > D:\\wobo\\notes.txt', 'allow'],
+  ['Out-File D:\\wobo\\out.txt', 'allow'],
 
   // Never.
   ['Remove-Item -Recurse -Force C:\\', 'deny'],

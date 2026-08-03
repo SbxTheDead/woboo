@@ -96,7 +96,7 @@ export { lockHolder };
 // Is the bot reachable at all, and what is it called? A short call, not a poll,
 // so it does not steal the slot from a running Woboo.
 export async function reachable() {
-  const token = loadSecrets().telegramToken || process.env.WOBO_TELEGRAM_TOKEN;
+  const token = loadSecrets().telegramToken || process.env.WOBOO_TELEGRAM_TOKEN || process.env.WOBO_TELEGRAM_TOKEN;
   if (!token) return { ok: false, error: 'no token stored' };
   try {
     const me = await request(`${API}/bot${token}/getMe`, {}, 8000);
@@ -190,7 +190,7 @@ export function createBot({ token }) {
 // Sending a file to its own owner is not a browser errand: it is one API call
 // with credentials that are already on disk.
 export async function deliver(filePath, caption = '') {
-  const token = loadSecrets().telegramToken || process.env.WOBO_TELEGRAM_TOKEN;
+  const token = loadSecrets().telegramToken || process.env.WOBOO_TELEGRAM_TOKEN || process.env.WOBO_TELEGRAM_TOKEN;
   const chatId = loadSettings().telegramChatId;
   if (!token) return { ok: false, error: 'no Telegram token stored' };
   if (!chatId) return { ok: false, error: 'no paired chat — send /pair from your phone first' };
@@ -213,7 +213,7 @@ export async function deliver(filePath, caption = '') {
 
 export async function start({ token, onPairCode } = {}) {
   const settings = loadSettings();
-  if (!token) throw new Error('no Telegram token — run `wobo secret telegram <token>`');
+  if (!token) throw new Error('no Telegram token — run `woboo secret telegram <token>`');
 
   const bot = createBot({ token });
 

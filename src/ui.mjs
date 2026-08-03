@@ -18,7 +18,7 @@ const ART = JSON.stringify(
 export function page({ key }) {
   return `<meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="wobo-key" content="${key}">
+<meta name="woboo-key" content="${key}">
 <title>Woboo</title>
 <style>
   :root {
@@ -95,7 +95,7 @@ export function page({ key }) {
      are recognisably one character rather than two skins. */
   .crt {
     position: relative; aspect-ratio: 1; width: 100%;
-    background: url('/assets/wobo.png') center/contain no-repeat;
+    background: url('/assets/woboo.png') center/contain no-repeat;
     animation: bob 6s ease-in-out infinite;
   }
   @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
@@ -287,10 +287,15 @@ ${FACE_CSS}
 
 <script>
 (function () {
-  var KEY = document.querySelector('meta[name=wobo-key]').content;
+  var KEY = document.querySelector('meta[name=woboo-key]').content;
   var $ = function (id) { return document.getElementById(id); };
   var state = null;
   var approvals = [];
+
+  // The key arrived in the URL once, for this navigation. The server has
+  // already set it as a session cookie, so take it out of the address bar —
+  // browser history and shoulder-surfers should not get to keep it.
+  if (location.search.indexOf('key=') >= 0) history.replaceState(null, '', location.pathname);
 
   function esc(text) {
     return String(text == null ? '' : text)
@@ -298,9 +303,9 @@ ${FACE_CSS}
   }
 
   function api(path, body) {
-    return fetch(path + (path.indexOf('?') < 0 ? '?' : '&') + 'key=' + encodeURIComponent(KEY), {
+    return fetch(path, {
       method: body === undefined ? 'GET' : 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', authorization: 'Bearer ' + KEY },
       body: body === undefined ? undefined : JSON.stringify(body)
     }).then(function (res) {
       return res.json().catch(function () { return {}; }).then(function (data) {
@@ -474,7 +479,7 @@ ${FACE_CSS}
 
   function showShot() {
     $('shot-wrap').classList.remove('hidden');
-    $('shot').src = '/api/shot?key=' + encodeURIComponent(KEY) + '&t=' + Date.now();
+    $('shot').src = '/api/shot?t=' + Date.now();
   }
 
   function handle(event) {
@@ -518,7 +523,9 @@ ${FACE_CSS}
   }
 
   function connect() {
-    var source = new EventSource('/api/events?key=' + encodeURIComponent(KEY));
+    // EventSource cannot set headers; the session cookie the page set on load
+    // is what authenticates this connection.
+    var source = new EventSource('/api/events');
     source.onopen = function () {
       $('tag-link').textContent = '● live';
       $('tag-link').className = 'tag live';

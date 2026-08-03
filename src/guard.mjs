@@ -131,12 +131,32 @@ const FORBIDDEN = [
   [/\b(takeown|icacls|chmod\s+777)\b/i, 'permission change'],
 ];
 
+// The state directory holds settings.json (the allowlist itself), the owner
+// key, the secrets and the STOP latch. A shell write into it — however
+// allowlisted the verb doing the writing — is the agent editing its own
+// permissions, so the answer is never. Matched in every spelling: `~/.woboo`
+// or the expanded absolute path, either separator, any case (Windows paths
+// are case-insensitive and PowerShell takes both slashes).
+const STATE_DIR = new RegExp(
+  `(?:${[PATHS.home, PATHS.home.replace(/\\/g, '/'), '~/.woboo', '~\\.woboo']
+    .map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('|')})(?=[/\\\\]|$)`,
+  'i'
+);
+// Verbs that put bytes in a file and are on the allowlist, plus redirection,
+// which rides on any verb at all (`echo ... > settings.json`).
+const STATE_WRITE = /\b(set-content|out-file)\b|>>?/i;
+
 export function classifyCommand(raw) {
   const cmd = String(raw || '').trim();
   if (!cmd) return { verdict: 'deny', reason: 'empty command' };
 
   for (const [pattern, why] of FORBIDDEN) {
     if (pattern.test(cmd)) return { verdict: 'deny', reason: `refused (${why})` };
+  }
+
+  if (STATE_WRITE.test(cmd) && STATE_DIR.test(cmd)) {
+    return { verdict: 'deny', reason: 'refused (write to Woboo state directory)' };
   }
 
   const settings = loadSettings();
@@ -161,7 +181,16 @@ export function classifyCommand(raw) {
     // its own segment and gets classified on its own merits.
     if (!bare) continue;
     if (KEYWORDS.has(bare)) continue;
-    // Variables, switches, quoted literals, numbers, array indexing.
+    // A type literal driving a static method — [System.IO.File]::WriteAllText,
+    // [System.Diagnostics.Process]::Start — executes with no cmdlet verb at
+    // all, so there is nothing for the allowlist to say yes or no to. It is
+    // the same class of hole as `iex`: no legitimate task needs it and every
+    // bypass wants it, so deny rather than ask. Casts and indexing without
+    // the `::` — [char]65, [int]$x, $x[0] — run nothing and fall through.
+    if (/^\[[\w.]+\]::/.test(bare)) {
+      return { verdict: 'deny', reason: 'refused (type-static method invocation)' };
+    }
+    // Variables, switches, quoted literals, numbers, casts, array indexing.
     if (/^[$\-'"[\d]/.test(bare)) continue;
     // Property or method access such as `.Length`. A bare `.` is NOT skipped:
     // on its own it is PowerShell's dot-source operator, which runs a script.

@@ -10,22 +10,22 @@ const on = (channel) => (handler) => {
   return () => ipcRenderer.removeListener(channel, wrapped);
 };
 
-contextBridge.exposeInMainWorld('wobo', {
-  snapshot: () => ipcRenderer.invoke('wobo:snapshot'),
+contextBridge.exposeInMainWorld('woboo', {
+  snapshot: () => ipcRenderer.invoke('woboo:snapshot'),
 
-  onFace: on('wobo:face'),
-  onEvent: on('wobo:event'),
-  onToast: on('wobo:toast'),
-  onHover: on('wobo:hover'),
-  onBoot: on('wobo:boot'),
+  onFace: on('woboo:face'),
+  onEvent: on('woboo:event'),
+  onToast: on('woboo:toast'),
+  onHover: on('woboo:hover'),
+  onBoot: on('woboo:boot'),
 
-  task: (text) => ipcRenderer.send('wobo:task', text),
-  stop: () => ipcRenderer.send('wobo:stop'),
-  resume: () => ipcRenderer.send('wobo:resume'),
-  approve: (id, decision) => ipcRenderer.send('wobo:approve', { id, decision }),
-  look: () => ipcRenderer.send('wobo:look'),
-  panel: () => ipcRenderer.send('wobo:panel'),
-  mode: (next) => ipcRenderer.send('wobo:mode', next),
-  hide: () => ipcRenderer.send('wobo:hide'),
-  quit: () => ipcRenderer.send('wobo:quit'),
+  task: (text) => ipcRenderer.send('woboo:task', text),
+  stop: () => ipcRenderer.send('woboo:stop'),
+  resume: () => ipcRenderer.send('woboo:resume'),
+  approve: (id, decision) => ipcRenderer.send('woboo:approve', { id, decision }),
+  look: () => ipcRenderer.send('woboo:look'),
+  panel: () => ipcRenderer.send('woboo:panel'),
+  mode: (next) => ipcRenderer.send('woboo:mode', next),
+  hide: () => ipcRenderer.send('woboo:hide'),
+  quit: () => ipcRenderer.send('woboo:quit'),
 });

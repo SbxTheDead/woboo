@@ -70,10 +70,12 @@ function createSplash() {
     // shows is worse than a frame of empty transparency.
     show: true,
     webPreferences: {
+      // preload.cjs only touches contextBridge and ipcRenderer, which is
+      // exactly the API a sandboxed preload gets — so the sandbox stays on.
       preload: path.join(HERE, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      sandbox: true,
     },
   });
   splash.loadFile(path.join(HERE, 'splash.html'));
@@ -81,7 +83,7 @@ function createSplash() {
   // dropped on the floor, so hold the lines until the page says it is there.
   splash.webContents.once('did-finish-load', () => {
     splashReady = true;
-    for (const step of bootQueue) splash.webContents.send('wobo:boot', step);
+    for (const step of bootQueue) splash.webContents.send('woboo:boot', step);
     bootQueue.length = 0;
   });
   splash.on('closed', () => {
@@ -96,7 +98,7 @@ const bootQueue = [];
 function bootStep(label, detail = '', level = 'ok') {
   const step = { label, detail, level };
   if (!splash || splash.isDestroyed()) return;
-  if (splashReady) splash.webContents.send('wobo:boot', step);
+  if (splashReady) splash.webContents.send('woboo:boot', step);
   else bootQueue.push(step);
 }
 
@@ -184,10 +186,12 @@ function createWindow() {
     // A companion should not steal focus every time it changes expression.
     focusable: true,
     webPreferences: {
+      // Same preload as the splash: contextBridge and ipcRenderer only, so the
+      // renderer runs sandboxed.
       preload: path.join(HERE, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      sandbox: true,
     },
   });
 
@@ -303,45 +307,45 @@ async function openPanel({ external = false } = {}) {
     if (external) shell.openExternal(panel.url);
     else createConsole(panel.url);
   } catch (err) {
-    toRenderer('wobo:toast', err.message);
+    toRenderer('woboo:toast', err.message);
   }
 }
 
 // ── ipc ───────────────────────────────────────────────────────────────────────
 
 function wireIpc() {
-  ipcMain.handle('wobo:snapshot', () => snapshot());
+  ipcMain.handle('woboo:snapshot', () => snapshot());
 
-  ipcMain.on('wobo:mode', (_event, next) => setMode(next === 'expanded' ? 'expanded' : 'compact'));
+  ipcMain.on('woboo:mode', (_event, next) => setMode(next === 'expanded' ? 'expanded' : 'compact'));
 
-  ipcMain.on('wobo:task', (_event, task) => {
+  ipcMain.on('woboo:task', (_event, task) => {
     const text = String(task || '').trim();
     if (!text) return;
-    if (foreman.isBusy()) return toRenderer('wobo:toast', 'Woboo is already on a mission.');
-    if (guard.isStopped()) return toRenderer('wobo:toast', `STOP is engaged: ${guard.stopReason()}`);
+    if (foreman.isBusy()) return toRenderer('woboo:toast', 'Woboo is already on a mission.');
+    if (guard.isStopped()) return toRenderer('woboo:toast', `STOP is engaged: ${guard.stopReason()}`);
     setMode('expanded');
-    foreman.runMission(text).catch((err) => toRenderer('wobo:toast', err.message));
+    foreman.runMission(text).catch((err) => toRenderer('woboo:toast', err.message));
     return undefined;
   });
 
-  ipcMain.on('wobo:stop', () => guard.engageStop('owner pressed STOP (widget)'));
-  ipcMain.on('wobo:resume', () => guard.clearStop());
-  ipcMain.on('wobo:approve', (_event, { id, decision }) => guard.resolveApproval(id, decision));
-  ipcMain.on('wobo:hide', () => win?.hide());
-  ipcMain.on('wobo:quit', () => app.quit());
+  ipcMain.on('woboo:stop', () => guard.engageStop('owner pressed STOP (widget)'));
+  ipcMain.on('woboo:resume', () => guard.clearStop());
+  ipcMain.on('woboo:approve', (_event, { id, decision }) => guard.resolveApproval(id, decision));
+  ipcMain.on('woboo:hide', () => win?.hide());
+  ipcMain.on('woboo:quit', () => app.quit());
   // Wrapped, not passed directly: ipcMain hands the listener an event object,
   // which would land in openPanel's options argument.
-  ipcMain.on('wobo:panel', () => openPanel());
+  ipcMain.on('woboo:panel', () => openPanel());
 
-  ipcMain.on('wobo:look', async () => {
+  ipcMain.on('woboo:look', async () => {
     const shot = await eyes.screenshot({ reason: 'widget' });
-    if (!shot.ok) toRenderer('wobo:toast', shot.error || 'screen capture unavailable');
+    if (!shot.ok) toRenderer('woboo:toast', shot.error || 'screen capture unavailable');
   });
 }
 
 // ── boot ──────────────────────────────────────────────────────────────────────
 
-// Two Wobos on one desktop would fight over STOP and the journal.
+// Two Woboos on one desktop would fight over STOP and the journal.
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
@@ -443,11 +447,11 @@ if (!app.requestSingleInstanceLock()) {
       // the desktop, and this used to block the rest of the boot.
       connect();
     } else {
-      bootStep('phone not linked', 'wobo secret telegram', 'warn');
+      bootStep('phone not linked', 'woboo secret telegram', 'warn');
     }
 
     bootStep('', '', 'ok');
-    if (splash && !splash.isDestroyed()) splash.webContents.send('wobo:boot', { done: true });
+    if (splash && !splash.isDestroyed()) splash.webContents.send('woboo:boot', { done: true });
     await settled(700);
 
     // ── open ────────────────────────────────────────────────────────────────
@@ -482,7 +486,7 @@ if (!app.requestSingleInstanceLock()) {
     subscribe((event) => {
       if (event.type === 'face') {
         const painted = paint(event.state, event.note);
-        toRenderer('wobo:face', painted);
+        toRenderer('woboo:face', painted);
         if (tray && !tray.isDestroyed()) {
           tray.setImage(trayImage(event.state));
           tray.setToolTip(`Woboo — ${event.state}${event.note ? `: ${event.note}` : ''}`);
@@ -497,7 +501,7 @@ if (!app.requestSingleInstanceLock()) {
       }
       if (event.type === 'guard' && refreshTray) refreshTray();
 
-      toRenderer('wobo:event', event);
+      toRenderer('woboo:event', event);
     });
 
     // Hover detection has to live out here. The head is a `-webkit-app-region:
@@ -516,7 +520,7 @@ if (!app.requestSingleInstanceLock()) {
         point.y >= box.y && point.y < box.y + box.height;
       if (inside === hovering) return;
       hovering = inside;
-      toRenderer('wobo:hover', inside);
+      toRenderer('woboo:hover', inside);
     }, 160);
     if (typeof watchCursor.unref === 'function') watchCursor.unref();
 

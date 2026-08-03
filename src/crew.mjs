@@ -13,20 +13,45 @@ import { assertLive } from './guard.mjs';
 import { record } from './journal.mjs';
 import { publish } from './bus.mjs';
 
+// A delegate step runs outside Woboo's command guard — the crew tool answers to
+// its own permission system, not to the allowlist. So the brief is sent with the
+// most restrictive flags that still let the tool work, unless the owner sets
+// crewTrust to 'full' and accepts the tool's whole reach.
+const CLAUDE_DENIED = [
+  'Bash(rm -rf:*)',
+  'Bash(rm -fr:*)',
+  'Bash(git push --force:*)',
+  'Bash(git push -f:*)',
+  'Bash(git reset --hard:*)',
+];
+
 // Each driver knows how to run its tool headlessly: one prompt in, work done,
-// transcript out. `args` returns the full argv after the binary.
+// transcript out. `args` returns the full argv after the binary — flags first,
+// the instruction last as a single entry.
 const DRIVERS = {
   claude: {
     label: 'Claude Code',
     bin: 'claude',
-    args: (instruction) => ['-p', instruction],
+    args: (instruction, trust) =>
+      trust === 'full'
+        ? ['-p', '--permission-mode', 'bypassPermissions', instruction]
+        : ['-p', '--permission-mode', 'acceptEdits', '--disallowedTools', CLAUDE_DENIED.join(','), instruction],
   },
   codex: {
     label: 'Codex',
     bin: 'codex',
-    args: (instruction) => ['exec', instruction],
+    args: (instruction, trust) =>
+      trust === 'full'
+        ? ['exec', '--sandbox', 'danger-full-access', instruction]
+        : ['exec', '--sandbox', 'workspace-write', instruction],
   },
 };
+
+// The exact argv a briefing spawns with. Exported so the trust boundary can be
+// tested without launching a crew tool.
+export function briefingArgs(name, instruction, trust = 'guarded') {
+  return DRIVERS[name].args(instruction, trust);
+}
 
 let cache = null;
 
@@ -117,12 +142,11 @@ export async function delegate({ instruction, cwd, member, timeout = 900_000, on
     };
   }
 
-  const driver = DRIVERS[chosen.name];
   record('crew', `briefing ${chosen.label} (${instruction.length} chars)`, { level: 'info' });
   publish({ type: 'crew', member: chosen.label, state: 'working' });
 
   const started = Date.now();
-  const result = await exec(chosen.path, driver.args(instruction), {
+  const result = await exec(chosen.path, briefingArgs(chosen.name, instruction, loadSettings().crewTrust), {
     cwd,
     timeout,
     action: 'delegate',

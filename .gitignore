@@ -11,6 +11,9 @@ shots/
 memory/
 STOP
 
+# Personal documents, never source.
+resume.txt
+
 .env
 .env.*
 
@@ -23,11 +26,9 @@ elephant_research/
 *.pdf
 
 research/
-invest_research/
 *_research/
 # Documents Woboo writes land in the workspace root; source HTML lives in desktop/.
 /*.html
-/*.pdf
 
 # Scratch space for mission output.
 tmp/

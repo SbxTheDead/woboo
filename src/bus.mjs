@@ -1,4 +1,4 @@
-// The nervous system. Everything Wobo does becomes an event here, and the
+// The nervous system. Everything Woboo does becomes an event here, and the
 // dashboard is just a subscriber. Late subscribers get the recent past replayed
 // so a browser opened mid-mission still shows a full picture.
 

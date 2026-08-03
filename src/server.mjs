@@ -34,11 +34,27 @@ const HOST = '127.0.0.1';
 const BODY_LIMIT = 256_000;
 
 // ── auth ──────────────────────────────────────────────────────────────────────
+//
+// The key reaches the server three ways, because the browser gives it no
+// single one. Fetches send it as a header. EventSource and <img> cannot set
+// headers, so after the first authenticated exchange the server hands back a
+// session cookie and those requests ride on it. And the very first navigation
+// cannot send a header either, so the page itself — and only the page — still
+// accepts ?key= in the URL; the page then strips it from the address bar, so
+// the key does not live on in history or leak into later requests.
+
+const COOKIE = 'woboo_key';
 
 function presented(req, url) {
   const header = req.headers.authorization || '';
   if (header.startsWith('Bearer ')) return header.slice(7).trim();
-  return url.searchParams.get('key') || req.headers['x-wobo-key'] || '';
+  if (req.headers['x-woboo-key']) return req.headers['x-woboo-key'];
+  const match = /(?:^|;\s*)woboo_key=([^;]+)/.exec(req.headers.cookie || '');
+  if (match) return decodeURIComponent(match[1]);
+  if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) {
+    return url.searchParams.get('key') || '';
+  }
+  return '';
 }
 
 function authorized(req, url) {
@@ -104,7 +120,12 @@ async function route(req, res, url) {
   const method = req.method || 'GET';
 
   if (method === 'GET' && (pathname === '/' || pathname === '/index.html')) {
-    return send(res, 200, page({ key: ownerKey() }), { 'content-type': 'text/html; charset=utf-8' });
+    // The session cookie is what lets EventSource and the screenshot <img>
+    // authenticate — they cannot set a header. Session-only, loopback-only.
+    return send(res, 200, page({ key: ownerKey() }), {
+      'content-type': 'text/html; charset=utf-8',
+      'set-cookie': `${COOKIE}=${ownerKey()}; Path=/; SameSite=Strict; HttpOnly`,
+    });
   }
 
   // The brand assets. A fixed whitelist rather than a static directory: this
@@ -112,7 +133,7 @@ async function route(req, res, url) {
   if (method === 'GET' && pathname.startsWith('/assets/')) {
     const TYPES = { '.png': 'image/png', '.svg': 'image/svg+xml', '.jpg': 'image/jpeg' };
     const name = pathname.slice('/assets/'.length);
-    if (!['wobo.png', 'logo.svg', 'logo.png', 'desk.jpg'].includes(name)) {
+    if (!['woboo.png', 'logo.svg', 'logo.png', 'desk.jpg'].includes(name)) {
       return send(res, 404, { error: 'unknown asset' });
     }
     const file = path.join(HERE, '..', 'assets', name);
@@ -289,7 +310,7 @@ export function createServer() {
     const publicAsset = req.method === 'GET' && url.pathname.startsWith('/assets/');
 
     if (!publicAsset && !authorized(req, url)) {
-      return send(res, 401, { error: 'owner key required — start Woboo with `wobo up` and use the printed URL' });
+      return send(res, 401, { error: 'owner key required — start Woboo with `woboo up` and use the printed URL' });
     }
 
     try {
@@ -302,7 +323,7 @@ export function createServer() {
   });
 }
 
-// `strict` is for `wobo up`, where the owner named a port and silently using a
+// `strict` is for `woboo up`, where the owner named a port and silently using a
 // different one would be confusing. The app leaves it off: a stale server from
 // an earlier session should not stop Woboo from opening its own window.
 export function listen({ port, strict = false, tries = 12 } = {}) {
@@ -315,7 +336,7 @@ export function listen({ port, strict = false, tries = 12 } = {}) {
         if (err.code !== 'EADDRINUSE') return reject(err);
         if (strict || remaining <= 0) {
           return reject(
-            new Error(`port ${candidate} is already in use — try \`wobo up --port ${candidate + 1}\``),
+            new Error(`port ${candidate} is already in use — try \`woboo up --port ${candidate + 1}\``),
           );
         }
         resolve(attempt(candidate + 1, remaining - 1));
