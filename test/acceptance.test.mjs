@@ -42,6 +42,16 @@ test('producing no file is fine when no file was asked for', () => {
   assert.equal(obviousShortfall([], ['An answer to the question, in chat']), null);
 });
 
+test('an empty file is a shortfall — unless an empty file is what was asked for', () => {
+  const blank = file('file1.txt', '');
+  assert.match(obviousShortfall([blank], ['A summary of the thread in file1.txt']) || '', /empty/i);
+  // Task 2 of the suite: "create 5 empty text files named file1.txt through
+  // file5.txt". Nought bytes is the requirement, and it was being reported as
+  // the failure.
+  assert.equal(obviousShortfall([blank], ['Five empty text files: file1.txt … file5.txt on the Desktop']), null);
+  assert.equal(obviousShortfall([blank], ['A blank file1.txt']), null);
+});
+
 test('a real document passes the cheap checks', () => {
   const f = file('real.md', '# Support summary\n\nThe thread began with a refund request.\n'.repeat(10));
   assert.equal(obviousShortfall([f]), null);

@@ -359,6 +359,89 @@ export function orArtifact(named, produced = artifacts) {
   return chosen;
 }
 
+// The files a shell step actually produced.
+//
+// `artifacts` was only ever filled by the steps that hand back the file they
+// wrote — research, compose, read. A shell step hands back an exit code and
+// nothing else, so "create five empty text files" created five files, proved it
+// with a command that exited 0, and was then reported as a failure: the
+// acceptance check looked at an empty artifact list and said no file was
+// produced at all. The files were on the desktop the whole time. Nothing had
+// asked the disk.
+//
+// The command names them, so read the names out of the command and keep the
+// ones that are on disk and were written while this step was running. Anything
+// merely read, or deleted, or named by a plan and never created, fails one of
+// those two tests and is left out.
+//
+// PowerShell interpolation cannot be resolved from here — file$_.txt is five
+// filenames the shell knew and this does not — so an environment variable is
+// looked up, any other $variable becomes a wildcard, and the directory listing
+// answers the question instead.
+function resolveVariables(token) {
+  return token
+    .replace(/\$env:(\w+)/gi, (whole, name) => process.env[name] ?? whole)
+    .replace(/%(\w+)%/g, (whole, name) => process.env[name] ?? whole)
+    .replace(/\$\{[^}]*\}|\$\w+|\$_/g, '*');
+}
+
+// Only the last segment may be a wildcard: a listing needs a real directory to
+// list. `file*.txt` is answered; `*/report.txt` is not, and is left alone.
+function expandWildcard(full) {
+  const dir = path.dirname(full);
+  const name = path.basename(full);
+  if (dir.includes('*')) return [];
+  const pattern = new RegExp(`^${name.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*')}$`, 'i');
+  try {
+    return fs
+      .readdirSync(dir)
+      .filter((entry) => pattern.test(entry))
+      .map((entry) => path.join(dir, entry));
+  } catch {
+    // The directory does not exist, so neither do the files it would hold.
+    return [];
+  }
+}
+
+const LOOKS_LIKE_A_FILE = /\.[A-Za-z0-9]{1,6}$/;
+const TOKENS = /'([^']*)'|"([^"]*)"|([^\s;,()|&<>'"]+)/g;
+
+export function filesTouched(command, cwd, since = 0) {
+  const text = String(command || '');
+  const found = [];
+  const seen = new Set();
+
+  for (const match of text.matchAll(TOKENS)) {
+    const raw = (match[1] ?? match[2] ?? match[3] ?? '').trim().replace(/^[`~]+/, '');
+    if (!raw || !LOOKS_LIKE_A_FILE.test(raw)) continue;
+
+    const token = resolveVariables(raw);
+    let full;
+    try {
+      full = path.resolve(cwd, token);
+    } catch {
+      continue;
+    }
+
+    for (const candidate of full.includes('*') ? expandWildcard(full) : [full]) {
+      if (seen.has(candidate)) continue;
+      seen.add(candidate);
+      try {
+        const stat = fs.statSync(candidate);
+        // A tolerance, because a filesystem's idea of "now" is coarser than
+        // ours and a file written in the same second must still count.
+        if (stat.isFile() && stat.mtimeMs >= since - 2000) found.push(candidate);
+      } catch {
+        // Named but not on disk: a file that was deleted, or one the plan
+        // guessed at and nothing ever wrote. Neither is an artifact.
+      }
+    }
+    // A command that names a hundred files is a listing, not a delivery.
+    if (found.length >= 50) break;
+  }
+  return found;
+}
+
 // The command inside the explanation, if the model wrapped one in prose.
 //
 // A repair came back as "Use a properly escaped single-quoted string with
@@ -444,6 +527,9 @@ async function executeStep(i, { cwd, member, task }) {
 
     // ── do the work ───────────────────────────────────────────────────────
     let work;
+    // Set only by the shell path, and only to what was actually run: the files
+    // a command produced are read back out of the command that produced them.
+    let command = null;
     if (step.kind === 'delegate') {
       work = await crew.delegate({
         instruction,
@@ -590,11 +676,23 @@ async function executeStep(i, { cwd, member, task }) {
       const shot = await eyes.screenshot({ reason: step.title });
       work = { ok: shot.ok, out: shot.ok ? `screen captured (${shot.size || 'ok'})` : shot.error };
     } else {
-      work = await run(unescapePaths(instruction), { cwd, label: step.title });
+      command = unescapePaths(instruction);
+      work = await run(command, { cwd, label: step.title });
     }
 
     setStep(i, { output: work.out || '' });
     if (work.ok && work.file) artifacts.push(work.file);
+
+    // A shell step reports an exit code and no filename, so the files it made
+    // were invisible to the acceptance check and every mission whose
+    // deliverable was a file written by a command was reported as delivering
+    // nothing. The verify is read alongside the command because it names the
+    // same files from the other direction: `Test-Path 'report.txt'`.
+    if (work.ok && command) {
+      for (const file of filesTouched(`${command} ${step.verify || ''}`, cwd, started)) {
+        if (!artifacts.includes(file)) artifacts.push(file);
+      }
+    }
 
     // When a step says it failed, say why.
     //

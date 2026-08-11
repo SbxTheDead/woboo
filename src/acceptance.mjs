@@ -65,10 +65,14 @@ Be strict, and be specific about why:
   package manifest, however well formatted.
 - A file containing "placeholder", "TODO", "lorem ipsum" or "summary goes here"
   meets nothing.
+- An empty file meets a deliverable only where the owner asked for an empty
+  file. "Five empty text files" is met by five files of nought bytes; a report
+  is not.
 - If the deliverable names a quantity — ten offers, five suppliers — and the
   evidence shows fewer, it is not met. Say how many there actually are.
 - "Sent to the owner" is met only if a step reports actually sending it.
-- An empty or nearly empty file is not a document.
+- An empty or nearly empty file is not a document, unless an empty file is
+  precisely what was asked for.
 
 If a deliverable IS met, say what makes you sure — the file, and what is in it.
 Do not be generous. The owner is about to be told this job is finished.`;
@@ -147,7 +151,14 @@ export function categorize(mission = {}) {
 
 // The obvious failures, caught without asking a model. These are cheap, certain,
 // and they are the ones that actually happened.
+// "Create five empty text files" asks for nought bytes, five times. The empty
+// check below is right about reports and wrong about these, and it fails them
+// on the one property that was requested — so when the owner asked for an
+// empty file, an empty file stops being evidence of a job half done.
+const WANTS_EMPTY = /\b(empty|blank|zero[\s-]?byte|0[\s-]?byte)\b/i;
+
 export function obviousShortfall(artifacts, deliverables = [], { category = null, steps = [] } = {}) {
+  const emptyIsWhatWasAsked = deliverables.some((d) => WANTS_EMPTY.test(d));
   if (!artifacts.length) {
     // An operation mission owes commands, not files. Every step already ran
     // and was verified by its exit code, so "restart the browser" ending with
@@ -170,7 +181,7 @@ export function obviousShortfall(artifacts, deliverables = [], { category = null
     // reading text meant a missing PDF — the most likely thing to be missing,
     // since it is usually the deliverable — went unnoticed.
     if (!fs.existsSync(file)) return `${path.basename(file)} was reported but is not on disk`;
-    if (fs.statSync(file).size === 0) return `${path.basename(file)} is empty`;
+    if (fs.statSync(file).size === 0 && !emptyIsWhatWasAsked) return `${path.basename(file)} is empty`;
 
     let text = '';
     try {
