@@ -344,6 +344,14 @@ async function cmdTelegram() {
 async function cmdNim(args) {
   const nim = await import('./src/nim.mjs');
   if (args[0] && args[0] !== 'list') {
+    // Guard: if the argument looks like an API key, store it as the key instead.
+    if (args[0].startsWith('nvapi-')) {
+      saveSecret('nvidiaApiKey', args[0]);
+      say(green('  stored NIM key (starts with nvapi-)'));
+      say(dim('  to set the model, use: woboo nim <model-id>'));
+      say(dim('  example: woboo nim nvidia/nemotron-3-super-120b-a12b'));
+      return 0;
+    }
     const next = saveSettings({ nimModel: args[0], provider: 'nim' });
     say(green(`  brain = NIM / ${next.nimModel}`));
     return 0;
