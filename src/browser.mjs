@@ -123,7 +123,16 @@ export async function open({ fresh = false } = {}) {
     if (!page) return { ok: false, error: 'browser did not open a debuggable page' };
   }
 
-  socket = new WebSocket(page.webSocketDebuggerUrl);
+  return attach(page.webSocketDebuggerUrl, { title: page.title, url: page.url });
+}
+
+// Attach to anything that speaks the DevTools protocol, given the WebSocket
+// URL directly. open() ends up here once it has found or launched a browser;
+// the tests arrive here with a fake CDP server instead of a real Chrome, so
+// the whole protocol layer below is exercised without one.
+export async function attach(wsUrl, { title = '', url = '' } = {}) {
+  assertLive('browser');
+  socket = new WebSocket(wsUrl);
   await new Promise((resolve, reject) => {
     socket.addEventListener('open', resolve, { once: true });
     socket.addEventListener('error', () => reject(new Error('could not attach to the browser')), { once: true });
@@ -192,7 +201,7 @@ export async function open({ fresh = false } = {}) {
   await send('Runtime.enable');
   await surface();
   record('browser', 'attached', { level: 'ok' });
-  return { ok: true, title: page.title, url: page.url };
+  return { ok: true, title, url };
 }
 
 function send(method, params = {}) {

@@ -7,6 +7,9 @@
 // person skims for the relevant part. This scores passages against the question
 // and reads those, which is the same idea with worse taste.
 
+import { promises as dns } from 'node:dns';
+import { isIP } from 'node:net';
+
 import { loadSecrets } from './config.mjs';
 import { record } from './journal.mjs';
 
@@ -70,7 +73,8 @@ export function authority(url) {
 // The WHATWG URL parser normalises odd IPv4 spellings (`0x7f.1`, `2130706433`)
 // to dotted quads before this ever sees them, so checking the dotted form is
 // enough. What this cannot see is a public name whose DNS answers with a
-// private address — closing that takes a resolver, not a regex.
+// private address — that check takes a resolver, and lives in resolvesPublicly
+// below, right next to the request itself.
 
 function privateIp4(host) {
   const parts = host.split('.');
@@ -126,6 +130,47 @@ export function isPublicUrl(url) {
   }
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
   return isPublicHost(parsed.hostname);
+}
+
+// The lexical screen above judges what a URL says; this judges where the name
+// actually points. A public-looking host whose DNS answers with 127.0.0.1 or
+// 169.254.169.254 is a rebinding attack, so every answer has to pass the same
+// rules an IP literal would. Fails closed: an unresolvable name, an empty
+// answer, or one private address among public ones all refuse the fetch.
+// `lookup` is injectable so the tests can stand in for DNS.
+export async function resolvesPublicly(host, lookup = (h) => dns.lookup(h, { all: true, verbatim: true })) {
+  let addresses;
+  try {
+    addresses = await lookup(host);
+  } catch {
+    return false;
+  }
+  return Boolean(addresses?.length) && addresses.every(({ address }) => isPublicHost(address));
+}
+
+// Fetch an arbitrary, already-screened URL with the resolver check folded in.
+// Redirects are followed by hand so each hop gets screened and resolved too —
+// undici's automatic following would carry the request to a 127.0.0.1
+// Location without either check ever seeing it.
+//
+// Known gap: undici resolves the name again when it connects, and without a
+// custom dispatcher there is no way to hand it the address that was just
+// validated. A name whose answer flips private in the instant between check
+// and connect can still slip through; closing that window takes an undici
+// Agent with a validating lookup, and undici is not a dependency here.
+async function fetchScreened(url, { lookup, ...options } = {}) {
+  let current = url;
+  for (let hop = 0; ; hop++) {
+    const host = new URL(current).hostname.replace(/^\[|\]$/g, '');
+    if (!isIP(host) && !(await resolvesPublicly(host, lookup))) return null;
+    const response = await fetch(current, { ...options, redirect: 'manual' });
+    if (response.status < 300 || response.status >= 400) return response;
+    const location = response.headers.get('location');
+    if (!location || hop >= 5) return null;
+    const next = new URL(location, current).href;
+    if (!isPublicUrl(next)) return null;
+    current = next;
+  }
 }
 
 // Tavily is a search API built for agents: it ranks by relevance to the query
@@ -242,7 +287,7 @@ export function htmlToText(html) {
 
 // Short by design: a slow source is not worth a long wait when there are a
 // dozen others in the queue.
-export async function fetchSource(hit, { timeout = 9000 } = {}) {
+export async function fetchSource(hit, { timeout = 9000, lookup } = {}) {
   // The screen, again, right before the request: a hit can also arrive from
   // somewhere other than search(), and the network is where refusal counts.
   if (!isPublicUrl(hit.url)) return null;
@@ -259,8 +304,12 @@ export async function fetchSource(hit, { timeout = 9000 } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
   try {
-    const response = await fetch(hit.url, { headers: { 'user-agent': UA }, signal: controller.signal });
-    if (!response.ok) return null;
+    const response = await fetchScreened(hit.url, {
+      headers: { 'user-agent': UA },
+      signal: controller.signal,
+      lookup,
+    });
+    if (!response?.ok) return null;
     const type = response.headers.get('content-type') || '';
     // A PDF is worth finding but not worth parsing here; the text ones carry.
     if (!/text\/html|text\/plain/i.test(type)) return null;

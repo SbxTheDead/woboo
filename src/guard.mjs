@@ -14,6 +14,7 @@ import crypto from 'node:crypto';
 import { PATHS, loadSettings, ensureHome } from './config.mjs';
 import { publish } from './bus.mjs';
 import { record } from './journal.mjs';
+import { audit } from './audit.mjs';
 
 export class Halted extends Error {
   constructor(reason) {
@@ -126,6 +127,33 @@ const FORBIDDEN = [
   // Running a string as code, whatever built it. There is no task that needs
   // this and every injection attempt wants it.
   [/(^|[\s;|(])(iex|Invoke-Expression)\b/i, 'executing a string as code'],
+  // Base64 hides the payload from this classifier, and decoding-then-
+  // classifying is exactly the hole the encoding exists to open. PowerShell
+  // takes any unambiguous prefix of -EncodedCommand (-e, -ec, -enc ...), so a
+  // base64-looking argument after any of them is refused without decoding.
+  [/(?:^|\s)-(?:e|ec|en|enc\w*)\s+[A-Za-z0-9+/=]{16,}/i, 'encoded command'],
+  // cmd /c hands a whole second command line to a shell this classifier never
+  // sees: quoting makes the inner segment boundaries unreliable, so the inner
+  // command would escape classification. Woboo's launcher is PowerShell and
+  // never needs the legacy shell, so the wrapper itself is refused rather
+  // than unwrapped — even when the inner command would have been innocent.
+  [/\bcmd(?:\.exe)?\s+\/[ck]\b/i, 'cmd wrapper'],
+  // Compiling C# from a string at the prompt. Add-Type with -Path or
+  // -AssemblyName has legitimate uses and only has to ask; -TypeDefinition
+  // and -MemberDefinition (P/Invoke) are pure code execution.
+  [/\bAdd-Type\b[^\n]*\s-(TypeDefinition|MemberDefinition)\b/i, 'compiling inline C#'],
+  // Living off the land: signed Microsoft binaries whose whole purpose here is
+  // running attacker code under a trusted signature. rundll32, regsvr32 and
+  // mshta proxy script execution; the script hosts run .vbs/.js. None of them
+  // builds, tests or commits anything.
+  [/\b(rundll32|regsvr32|mshta)(\.exe)?\b/i, 'proxy execution'],
+  [/\b(wscript|cscript)(\.exe)?\b/i, 'script host'],
+  // Dual-use tools refused only in their weaponised spellings: certutil
+  // downloading or writing binaries, BITS moving a file, WMI spawning a
+  // process. Every other use still has to come and ask.
+  [/\bcertutil\b[^\n]*\s-(urlcache|decode)\b/i, 'certutil download or decode'],
+  [/\bbitsadmin\b[^\n]*\s\/(transfer|create|addfile)\b/i, 'BITS transfer'],
+  [/\bwmic\b[^\n]*\bprocess\s+call\s+create\b/i, 'WMI process creation'],
   [/\breg\s+(add|delete)\b/i, 'registry write'],
   [/\bnetsh\b/i, 'network reconfiguration'],
   [/\b(takeown|icacls|chmod\s+777)\b/i, 'permission change'],
@@ -134,18 +162,24 @@ const FORBIDDEN = [
 // The state directory holds settings.json (the allowlist itself), the owner
 // key, the secrets and the STOP latch. A shell write into it — however
 // allowlisted the verb doing the writing — is the agent editing its own
-// permissions, so the answer is never. Matched in every spelling: `~/.woboo`
-// or the expanded absolute path, either separator, any case (Windows paths
-// are case-insensitive and PowerShell takes both slashes).
+// permissions. The owner may legitimately want that done by a mission, so the
+// answer is not "never" but "stop and ask, loudly, and audit the answer".
+// Matched in every spelling: `~/.woboo`, the expanded absolute path, the
+// environment-variable forms `$env:USERPROFILE\.woboo` and `$HOME/.woboo`,
+// either separator, any case (Windows paths are case-insensitive and
+// PowerShell takes both slashes).
 const STATE_DIR = new RegExp(
   `(?:${[PATHS.home, PATHS.home.replace(/\\/g, '/'), '~/.woboo', '~\\.woboo']
     .map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-    .join('|')})(?=[/\\\\]|$)`,
+    .join('|')}|\\$env:USERPROFILE[/\\\\]\\.woboo|\\$HOME[/\\\\]\\.woboo)(?=[/\\\\]|$)`,
   'i'
 );
 // Verbs that put bytes in a file and are on the allowlist, plus redirection,
 // which rides on any verb at all (`echo ... > settings.json`).
 const STATE_WRITE = /\b(set-content|out-file)\b|>>?/i;
+// The files a self-configuration write must name out loud: the allowlist
+// itself, the secrets, the owner key, and anything that smells like policy.
+const STATE_FILE = /settings\.json|secrets\.json|owner\.key|[\w.-]*(allowlist|policy)[\w.-]*/i;
 
 export function classifyCommand(raw) {
   const cmd = String(raw || '').trim();
@@ -156,7 +190,14 @@ export function classifyCommand(raw) {
   }
 
   if (STATE_WRITE.test(cmd) && STATE_DIR.test(cmd)) {
-    return { verdict: 'deny', reason: 'refused (write to Woboo state directory)' };
+    // Self-configuration: ask, never silently allow and never silently deny.
+    // The sensitive files get named so the owner knows exactly which door is
+    // being knocked on; clearToRun audits the ask and the answer.
+    const target = cmd.match(STATE_FILE)?.[0];
+    const reason = target
+      ? `wants to modify ${target} — Woboo's own configuration — needs your explicit approval`
+      : `wants to modify Woboo's own configuration (${PATHS.home}) — needs your explicit approval`;
+    return { verdict: 'ask', reason, selfConfig: true };
   }
 
   const settings = loadSettings();
@@ -185,9 +226,14 @@ export function classifyCommand(raw) {
     // [System.Diagnostics.Process]::Start — executes with no cmdlet verb at
     // all, so there is nothing for the allowlist to say yes or no to. It is
     // the same class of hole as `iex`: no legitimate task needs it and every
-    // bypass wants it, so deny rather than ask. Casts and indexing without
-    // the `::` — [char]65, [int]$x, $x[0] — run nothing and fall through.
-    if (/^\[[\w.]+\]::/.test(bare)) {
+    // bypass wants it, so deny rather than ask. The whole segment is checked,
+    // not just the first token: PowerShell tolerates whitespace before the
+    // `::` ([Type] ::Method), and a variable holding a type ($t::Start) is the
+    // same invocation wearing a name. Any spelling of the type matches —
+    // [Diagnostics.Process], lowercase — because only the shape is tested.
+    // Casts and indexing without the `::` — [char]65, [int]$x, $x[0] — run
+    // nothing and fall through.
+    if (/^\[[\w.]+\]\s*::/.test(segment) || /^\$[\w.]+\s*::/.test(segment)) {
       return { verdict: 'deny', reason: 'refused (type-static method invocation)' };
     }
     // Variables, switches, quoted literals, numbers, casts, array indexing.
@@ -230,6 +276,10 @@ export function requestApproval({ kind, detail, reason = '' }) {
       record('approval', `owner ${granted ? 'allowed' : 'denied'}: ${kind}${note ? ` (${note})` : ''}`, {
         level: granted ? 'ok' : 'error',
       });
+      // Every resolution lands here — the API, Telegram, a timeout, the STOP
+      // latch all settle through this one function — so this is the one place
+      // the audit log has to be written to catch them all.
+      audit('approval', `${kind} — ${detail}`, granted ? 'allowed' : `denied${note ? ` (${note})` : ''}`);
       publish({ type: 'approval:resolved', id, decision, note });
       resolve(granted);
     };
@@ -253,9 +303,12 @@ export function resolveApproval(id, decision) {
 // Convenience used by shell/hands: classify, then ask only if needed.
 export async function clearToRun(cmd) {
   assertLive('command');
-  const { verdict, reason } = classifyCommand(cmd);
+  const { verdict, reason, selfConfig } = classifyCommand(cmd);
   if (verdict === 'allow') return true;
   if (verdict === 'deny') throw new Refused(`${reason}: ${cmd}`);
+  // A knock on Woboo's own configuration is audited when it is asked; the
+  // owner's answer is audited by requestApproval's settle.
+  if (selfConfig) audit('self-config write', cmd, 'asked');
   const granted = await requestApproval({ kind: 'run command', detail: cmd, reason });
   if (!granted) throw new Refused(`owner declined: ${cmd}`);
   return true;

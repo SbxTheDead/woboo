@@ -111,10 +111,55 @@ export function evidenceFor(file) {
 const NAMES_A_FILE =
   /[-\w]+\.(pdf|html?|txt|md|docx?|xlsx?|pptx?|csv|json|png|jpe?g|gif|zip)\b|\b(file|document|pdf|spreadsheet|presentation|screenshot|image|photo|picture)\b/i;
 
+// What "finished" has to look like depends on the kind of mission.
+//
+// "Restart the browser" ends with zero files and is done; "summarise the
+// mailbox as a PDF" with zero files is a failure. The same empty artifacts
+// list means opposite things, so the cheap checks below judge against the
+// mission's category rather than against the deliverables alone.
+export const CATEGORIES = ['coding', 'research', 'browser', 'operation'];
+
+// Deliverables that describe a document written up from gathered material,
+// rather than something built. Tested before the file check, because "a PDF
+// report" names a file too — but what it owes is research, not code.
+const REPORTISH =
+  /\b(report|summary|summarise|summarize|document|write-?up|overview|digest|briefing|pdf|slides?|presentation)/i;
+
+// The plan may say what kind of mission this is; when it does not, the shape
+// of the plan says it instead. Pure, so the inference is testable on its own.
+export function categorize(mission = {}) {
+  const explicit = mission.category || mission.understanding?.category;
+  if (explicit && CATEGORIES.includes(explicit)) return explicit;
+
+  const steps = Array.isArray(mission.steps) ? mission.steps : [];
+  const kinds = new Set(steps.map((s) => s && s.kind).filter(Boolean));
+  const deliverables = mission.understanding?.deliverables || [];
+
+  // Gathering material and writing it up.
+  if (kinds.has('research') || kinds.has('compose') || deliverables.some((d) => REPORTISH.test(d))) return 'research';
+  // Building something: files are owed, or a coding tool is doing the building.
+  if (kinds.has('delegate') || deliverables.some((d) => NAMES_A_FILE.test(d))) return 'coding';
+  // The machine's state is the deliverable.
+  if (kinds.has('web') || kinds.has('computer') || kinds.has('inspect')) return 'browser';
+  // Commands and nothing else: "restart the browser", "run the tests".
+  return 'operation';
+}
+
 // The obvious failures, caught without asking a model. These are cheap, certain,
 // and they are the ones that actually happened.
-export function obviousShortfall(artifacts, deliverables = []) {
+export function obviousShortfall(artifacts, deliverables = [], { category = null, steps = [] } = {}) {
   if (!artifacts.length) {
+    // An operation mission owes commands, not files. Every step already ran
+    // and was verified by its exit code, so "restart the browser" ending with
+    // nothing on disk is the correct outcome — it was being reported failed
+    // for producing no file it never owed.
+    if (category === 'operation') return null;
+    // A browser mission owes a state, not a file — but the state must have
+    // been proven by a check, not asserted by a step that merely ran.
+    if (category === 'browser') {
+      const proven = steps.some((s) => s.verify && s.status === 'ok');
+      return steps.length && !proven ? 'the browser was driven, but the state it reached was never verified' : null;
+    }
     // Only a failure when a file was actually owed. Judged against the
     // deliverables, not the step count: "run the tests" and "restart the
     // browser" produce no file, and were being reported failed for it.

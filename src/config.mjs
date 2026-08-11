@@ -26,11 +26,15 @@ export const HOME =
 export const PATHS = {
   home: HOME,
   journal: path.join(HOME, 'journal.jsonl'),
+  audit: path.join(HOME, 'audit.jsonl'),
   ownerKey: path.join(HOME, 'owner.key'),
   stop: path.join(HOME, 'STOP'),
   settings: path.join(HOME, 'settings.json'),
   secrets: path.join(HOME, 'secrets.json'),
   shots: path.join(HOME, 'shots'),
+  // One snapshot per mission, rewritten after every step transition, so a
+  // crashed process leaves behind exactly what was proven and what was not.
+  missions: path.join(HOME, 'missions'),
 };
 
 const DEFAULTS = {

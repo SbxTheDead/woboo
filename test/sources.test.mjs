@@ -5,7 +5,7 @@
 // content farm and a peer-reviewed journal must not weigh the same.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { authority, keywords, selectPassages, htmlToText, isPublicUrl } from '../src/sources.mjs';
+import { authority, keywords, selectPassages, htmlToText, isPublicUrl, fetchSource } from '../src/sources.mjs';
 
 test('ranks a primary source above an aggregator above an unknown', () => {
   const nasa = authority('https://science.nasa.gov/mission/europa-clipper/');
@@ -138,4 +138,126 @@ test('the screen lets real public sources through', () => {
   ]) {
     assert.equal(isPublicUrl(url), true, `${url} is an ordinary public address`);
   }
+});
+
+// ── DNS rebinding ───────────────────────────────────────────────────────────
+// The lexical screen judges what a URL says. A public name can still resolve
+// to a private address, so fetchSource resolves the host and judges every
+// answer before a single byte is fetched. `lookup` stands in for DNS.
+
+const PAGE = `<p>${'A public page about elephants and their social lives. '.repeat(20)}</p>`;
+
+const PUBLIC_IP = { address: '93.184.216.34', family: 4 };
+
+function stubFetch(t, handler = async () => new Response(PAGE, { headers: { 'content-type': 'text/html' } })) {
+  const calls = [];
+  t.mock.method(globalThis, 'fetch', async (...args) => {
+    calls.push(args);
+    return handler(...args);
+  });
+  return calls;
+}
+
+test('a public name with public answers is fetched', async (t) => {
+  const calls = stubFetch(t);
+  const lookedUp = [];
+  const got = await fetchSource(
+    { url: 'https://elephants.example.com/report' },
+    {
+      lookup: async (host) => {
+        lookedUp.push(host);
+        return [PUBLIC_IP];
+      },
+    },
+  );
+
+  assert.ok(got, 'a public answer must not stop the fetch');
+  assert.deepEqual(lookedUp, ['elephants.example.com']);
+  assert.equal(calls.length, 1);
+});
+
+test('a public name that resolves to loopback is refused before the fetch', async (t) => {
+  // The rebinding case: the URL reads public, DNS says 127.0.0.1.
+  const calls = stubFetch(t);
+  const got = await fetchSource(
+    { url: 'https://sneaky.example.com/' },
+    { lookup: async () => [{ address: '127.0.0.1', family: 4 }] },
+  );
+
+  assert.equal(got, null, 'loopback behind a public name is still loopback');
+  assert.equal(calls.length, 0, 'the request must never leave the process');
+});
+
+test('a public name that resolves to cloud metadata is refused', async (t) => {
+  const calls = stubFetch(t);
+  const got = await fetchSource(
+    { url: 'https://sneaky.example.com/' },
+    { lookup: async () => [{ address: '169.254.169.254', family: 4 }] },
+  );
+
+  assert.equal(got, null);
+  assert.equal(calls.length, 0);
+});
+
+test('one private answer among public ones refuses the whole name', async (t) => {
+  // Round-robin DNS could hand the connection the private one, so every
+  // answer has to pass, not just most of them.
+  const calls = stubFetch(t);
+  const got = await fetchSource(
+    { url: 'https://sneaky.example.com/' },
+    { lookup: async () => [PUBLIC_IP, { address: '10.0.0.4', family: 4 }] },
+  );
+
+  assert.equal(got, null);
+  assert.equal(calls.length, 0);
+});
+
+test('a DNS failure fails closed', async (t) => {
+  const calls = stubFetch(t);
+  const got = await fetchSource(
+    { url: 'https://gone.example.com/' },
+    {
+      lookup: async () => {
+        throw new Error('getaddrinfo ENOTFOUND gone.example.com');
+      },
+    },
+  );
+
+  assert.equal(got, null, 'an unresolvable name is not fetchable anyway');
+  assert.equal(calls.length, 0);
+});
+
+test('an IP literal is judged lexically, without a lookup', async (t) => {
+  const calls = stubFetch(t);
+  let lookups = 0;
+  const got = await fetchSource(
+    { url: 'https://93.184.216.34/report' },
+    {
+      lookup: async () => {
+        lookups++;
+        return [PUBLIC_IP];
+      },
+    },
+  );
+
+  assert.ok(got, 'a public literal needs no resolver');
+  assert.equal(lookups, 0, 'a literal must not trigger a lookup');
+  assert.equal(calls.length, 1);
+});
+
+test('a redirect to a private address is refused hop by hop', async (t) => {
+  // Redirects are followed by hand precisely so this Location gets screened.
+  const calls = stubFetch(t, async (url) => {
+    if (String(url).includes('example.com')) {
+      return new Response(null, { status: 302, headers: { location: 'http://127.0.0.1:4477/api/state' } });
+    }
+    return new Response(PAGE, { headers: { 'content-type': 'text/html' } });
+  });
+  const got = await fetchSource(
+    { url: 'https://elephants.example.com/report' },
+    { lookup: async () => [PUBLIC_IP] },
+  );
+
+  assert.equal(got, null, 'a redirect is somebody else choosing the URL again');
+  assert.equal(calls.length, 1, 'only the first hop may leave the process');
 });

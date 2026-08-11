@@ -59,4 +59,57 @@ test('the journal is capped, and the cap lands on a line boundary', () => {
   const entries = tail(5);
   assert.equal(entries.length, 5);
   assert.ok(entries.at(-1).msg.endsWith(' 2400'), 'the newest entries survived the cap');
+
+  // Rotation swaps a temp file in atomically; a leftover .tmp would mean the
+  // swap never finished.
+  assert.deepEqual(
+    fs.readdirSync(home).filter((name) => name.endsWith('.tmp')),
+    [],
+    'rotation left a temp file behind',
+  );
+});
+
+test('a torn final line is excluded from the tail', () => {
+  fs.rmSync(PATHS.journal, { force: true });
+  record('test', 'whole line one');
+  record('test', 'whole line two');
+  // A kill mid-append: half a JSON object, no trailing newline.
+  fs.appendFileSync(PATHS.journal, '{"t":"2026-01-01","kind":"test","msg":"tor');
+  const entries = tail(10);
+  assert.deepEqual(entries.map((entry) => entry.msg), ['whole line one', 'whole line two']);
+});
+
+test('record() cuts a torn tail before appending', () => {
+  fs.rmSync(PATHS.journal, { force: true });
+  record('test', 'before the crash');
+  fs.appendFileSync(PATHS.journal, '{"t":"2026-01-01","kind":"test","msg":"tor');
+  record('test', 'after the crash');
+
+  const raw = fs.readFileSync(PATHS.journal, 'utf8');
+  assert.ok(!raw.includes('"tor'), 'the torn bytes are gone');
+  for (const line of raw.trim().split('\n')) {
+    assert.doesNotThrow(() => JSON.parse(line), 'an entry got glued onto the torn tail');
+  }
+
+  const entries = tail(10);
+  assert.deepEqual(entries.map((entry) => entry.msg), ['before the crash', 'after the crash']);
+});
+
+test('a malformed middle line is skipped, not fatal', () => {
+  fs.rmSync(PATHS.journal, { force: true });
+  record('test', 'before the garbage');
+  fs.appendFileSync(PATHS.journal, 'this is not json\n');
+  record('test', 'after the garbage');
+  const entries = tail(10);
+  assert.deepEqual(entries.map((entry) => entry.msg), ['before the garbage', 'after the garbage']);
+});
+
+test('entries survive a fresh module state', async () => {
+  fs.rmSync(PATHS.journal, { force: true });
+  record('test', 'durable entry');
+  // A fresh instance has an empty in-memory byte count; what it returns can
+  // only have come from disk.
+  const fresh = await import('../src/journal.mjs?fresh');
+  const entries = fresh.tail(10);
+  assert.equal(entries.at(-1).msg, 'durable entry');
 });

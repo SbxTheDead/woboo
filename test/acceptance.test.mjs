@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { evidenceFor, obviousShortfall, check } from '../src/acceptance.mjs';
+import { evidenceFor, obviousShortfall, check, categorize } from '../src/acceptance.mjs';
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'woboo-accept-'));
 const file = (name, body) => {
@@ -97,4 +97,82 @@ test('no deliverables means nothing to check, not a failure', async () => {
   const result = await check({ understanding: {}, artifacts: [], ask: async () => ({}) });
   assert.equal(result.checked, false);
   assert.equal(result.met, true);
+});
+
+test('an explicit category wins over inference, an unknown one is ignored', () => {
+  assert.equal(categorize({ category: 'operation', steps: [{ kind: 'delegate' }] }), 'operation');
+  assert.equal(
+    categorize({ understanding: { category: 'research', deliverables: [] }, steps: [{ kind: 'shell' }] }),
+    'research',
+  );
+  // A category nobody knows is not trusted — fall back to the plan's shape.
+  assert.equal(
+    categorize({ category: 'magic', steps: [{ kind: 'shell' }], understanding: { deliverables: [] } }),
+    'operation',
+  );
+});
+
+test('categorize infers each category from the shape of the plan', () => {
+  // Gathering material and writing it up.
+  assert.equal(
+    categorize({ steps: [{ kind: 'web' }, { kind: 'compose' }], understanding: { deliverables: ['The findings'] } }),
+    'research',
+  );
+  assert.equal(
+    categorize({ steps: [{ kind: 'shell' }], understanding: { deliverables: ['A report on flight prices'] } }),
+    'research',
+  );
+  // Building something: files owed, or a coding tool doing the building.
+  assert.equal(
+    categorize({ steps: [{ kind: 'delegate' }], understanding: { deliverables: ['The bug fixed'] } }),
+    'coding',
+  );
+  assert.equal(
+    categorize({ steps: [{ kind: 'shell' }], understanding: { deliverables: ['The results in out.csv'] } }),
+    'coding',
+  );
+  // The machine's state is the deliverable.
+  assert.equal(
+    categorize({ steps: [{ kind: 'web' }], understanding: { deliverables: ['The form submitted'] } }),
+    'browser',
+  );
+  assert.equal(
+    categorize({ steps: [{ kind: 'computer' }], understanding: { deliverables: ['The window closed'] } }),
+    'browser',
+  );
+  // Commands and nothing else.
+  assert.equal(
+    categorize({
+      steps: [{ kind: 'shell' }, { kind: 'shell' }],
+      understanding: { deliverables: ['The browser restarted with the profile loaded'] },
+    }),
+    'operation',
+  );
+});
+
+test('shortfalls are judged against the category', () => {
+  // An operation mission owes verified commands, not files: "restart the
+  // browser" ends with zero artifacts and is done.
+  assert.equal(obviousShortfall([], ['The browser restarted with the profile loaded'], { category: 'operation' }), null);
+  assert.equal(obviousShortfall([], ['The test suite passing'], { category: 'operation' }), null);
+
+  // Research owes a report; coding owes its files.
+  assert.match(obviousShortfall([], ['A PDF summarising the support thread'], { category: 'research' }) || '', /no file/i);
+  assert.match(obviousShortfall([], ['The results in out.csv'], { category: 'coding' }) || '', /no file/i);
+
+  // A browser mission owes a verified state, not a file.
+  assert.match(
+    obviousShortfall([], ['The form submitted'], {
+      category: 'browser',
+      steps: [{ kind: 'web', verify: '', status: 'ok' }],
+    }) || '',
+    /never verified/i,
+  );
+  assert.equal(
+    obviousShortfall([], ['The form submitted'], {
+      category: 'browser',
+      steps: [{ kind: 'web', verify: 'Test-Path x', status: 'ok' }],
+    }),
+    null,
+  );
 });

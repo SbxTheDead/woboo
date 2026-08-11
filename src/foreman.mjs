@@ -26,6 +26,33 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { run } from './shell.mjs';
 
+// What a step is allowed to answer, and the only two ways to build it.
+//
+// runStep used to return a bare boolean, and one refusal path returned
+// `{ ok: false, out }` — a truthy object, so a step that had refused to run
+// was read as a success and the mission reported done. The contract is now an
+// explicit `{ success: boolean, error?, data? }`, built here and nowhere else,
+// so no call site can hand-roll a truthy failure again.
+export function ok(data) {
+  return data === undefined ? { success: true } : { success: true, data };
+}
+
+export function fail(error, data) {
+  const result = { success: false, error: String(error || 'step failed') };
+  if (data !== undefined) result.data = data;
+  return result;
+}
+
+// Belt-and-braces for the same bug class. Everything leaving runStep passes
+// through here, and a value that is not the strict shape can only become a
+// failure — never a truthy pass — and is journaled, because a malformed
+// result means a code path somewhere is answering a question it was not asked.
+export function asStepResult(value) {
+  if (value && typeof value === 'object' && typeof value.success === 'boolean') return value;
+  record('step', 'a step produced a malformed result — failing closed', { level: 'error' });
+  return fail('internal: malformed step result');
+}
+
 let mission = null;
 
 // The files this mission has actually produced.
@@ -175,8 +202,10 @@ export async function runMission(task, { workspace } = {}) {
     // ── execute ─────────────────────────────────────────────────────────────
     for (let i = 0; i < mission.steps.length; i += 1) {
       assertLive('step');
-      const ok = await runStep(i, { cwd, member, task });
-      if (!ok) {
+      const result = await runStep(i, { cwd, member, task });
+      // Strict comparison, on purpose: anything that is not an explicit
+      // success fails the mission closed rather than passing on truthiness.
+      if (result.success !== true) {
         mission.state = 'failed';
         mission.report = `Stopped at step ${i + 1}: ${mission.steps[i].title}`;
         setFace('error', mission.steps[i].title);
@@ -193,7 +222,14 @@ export async function runMission(task, { workspace } = {}) {
         ? `All ${mission.steps.length} steps done, ${checked} proven by a command.`
         : `All ${mission.steps.length} steps done.`;
 
-      let shortfall = acceptance.obviousShortfall(artifacts, mission.understanding?.deliverables);
+      // What "done" has to look like depends on the kind of mission: "restart
+      // the browser" owes verified commands and no files, a research mission
+      // owes a report. Categorize first, then judge shortfalls against that.
+      mission.category = acceptance.categorize(mission);
+      let shortfall = acceptance.obviousShortfall(artifacts, mission.understanding?.deliverables, {
+        category: mission.category,
+        steps: mission.steps,
+      });
       let verdicts = [];
 
       if (!shortfall && mission.understanding && brain.hasCredentials()) {
@@ -360,7 +396,14 @@ export function verifyIsMalformed(command) {
   return null;
 }
 
-async function runStep(i, { cwd, member, task }) {
+// Every result a step can produce funnels through the guard, so a code path
+// that answers with a bare boolean or a truthy `{ ok: false }` fails closed
+// instead of passing on truthiness — the original bug, structurally refused.
+export async function runStep(i, opts) {
+  return asStepResult(await executeStep(i, opts));
+}
+
+async function executeStep(i, { cwd, member, task }) {
   const step = mission.steps[i];
   const settings = loadSettings();
   const started = Date.now();
@@ -386,7 +429,7 @@ async function runStep(i, { cwd, member, task }) {
       });
       if (work.missing) {
         setStep(i, { status: 'failed', output: work.out, ms: Date.now() - started });
-        return false;
+        return fail(work.out || 'the crew tool could not do this step');
       }
     } else if (step.kind === 'computer') {
       // The one step kind where Woboo does the work itself, with its own eyes and
@@ -397,7 +440,7 @@ async function runStep(i, { cwd, member, task }) {
       });
       if (work.missing) {
         setStep(i, { status: 'failed', output: work.out, ms: Date.now() - started });
-        return false;
+        return fail(work.out || 'the hands could not do this step');
       }
     } else if (step.kind === 'research') {
       // One step, one loop: search, read, notice the gaps, look again, write,
@@ -551,14 +594,14 @@ async function runStep(i, { cwd, member, task }) {
     const DEFINITIVE = new Set(['deliver', 'compose', 'research', 'web', 'read']);
     if (!work.ok && (DEFINITIVE.has(step.kind) || !step.verify)) {
       setStep(i, { status: 'failed', ms: Date.now() - started });
-      return false;
+      return fail(work.out);
     }
 
     // ── prove it ──────────────────────────────────────────────────────────
     if (!step.verify) {
       setStep(i, { status: 'ok', ms: Date.now() - started });
       record('step', `step ${i + 1} done (nothing to verify)`, { level: 'warn' });
-      return true;
+      return ok();
     }
 
     setStep(i, { status: 'verifying' });
@@ -570,7 +613,7 @@ async function runStep(i, { cwd, member, task }) {
     if (broken) {
       record('step', `step ${i + 1}: the check itself is malformed (${broken}) — skipping it`, { level: 'warn' });
       setStep(i, { status: 'ok', ms: Date.now() - started, verifyOutput: `check not run: ${broken}` });
-      return true;
+      return ok();
     }
 
     // Check the file that was made, not the one the plan guessed at.
@@ -610,7 +653,7 @@ async function runStep(i, { cwd, member, task }) {
         { level: 'error' },
       );
       setStep(i, { status: 'failed', ms: Date.now() - started });
-      return false;
+      return fail(`step ${i + 1} produced ${path.basename(work.file)}, but its check asks for a .${wants}`);
     }
 
     const check = await run(asExitCode(verifyCommand), { cwd, label: `verify ${step.title}` });
@@ -619,7 +662,7 @@ async function runStep(i, { cwd, member, task }) {
     if (check.ok) {
       setStep(i, { status: 'ok', ms: Date.now() - started });
       record('step', `step ${i + 1} verified`, { level: 'ok' });
-      return true;
+      return ok();
     }
 
     // ── repair ────────────────────────────────────────────────────────────
@@ -696,7 +739,7 @@ async function runStep(i, { cwd, member, task }) {
   record('step', `step ${i + 1} could not be proven after ${settings.maxRepairs + 1} attempts`, {
     level: 'error',
   });
-  return false;
+  return fail(`step ${i + 1} could not be proven after ${settings.maxRepairs + 1} attempts`);
 }
 
 // Used by `woboo selftest`: a fixed mission that exercises plan → run → verify →
@@ -742,7 +785,7 @@ export async function selfTest() {
     const second = await runStep(1, { cwd: process.cwd(), member: null, task: mission.task });
     // The second step is *supposed* to fail — that is what proves the loop
     // actually checks instead of assuming.
-    const pass = first === true && second === false;
+    const pass = first.success === true && second.success === false;
     mission.state = pass ? 'done' : 'failed';
     mission.report = pass
       ? 'Loop verified: a good step passed, a bad step was caught and retried.'
