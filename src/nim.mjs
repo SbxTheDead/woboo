@@ -164,12 +164,12 @@ async function ask({ system, prompt, schema, name, maxTokens = 8000, think = tru
   // keep the request — the schema also lives in the prompt, and thinking is a
   // quality lever, not a requirement.
   let response = await post();
-  if (response.status === 400 || response.status === 422) {
+  if (response.status === 400 || response.status === 404 || response.status === 422) {
     delete body.chat_template_kwargs;
     delete body.reasoning_budget;
     response = await post();
   }
-  if (response.status === 400 || response.status === 422) {
+  if (response.status === 400 || response.status === 404 || response.status === 422) {
     delete body.response_format;
     response = await post();
   }
