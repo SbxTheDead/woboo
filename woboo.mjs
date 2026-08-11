@@ -15,7 +15,7 @@ import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
-import { PATHS, loadSettings, saveSettings, loadSecrets, saveSecret, ownerKey, ensureHome } from './src/config.mjs';
+import { PATHS, loadSettings, saveSettings, loadSecrets, saveSecret, ownerKey, ensureHome, loadEnv } from './src/config.mjs';
 import * as memory from './src/memory.mjs';
 import * as telegram from './src/telegram.mjs';
 import { subscribe } from './src/bus.mjs';
@@ -27,6 +27,11 @@ import * as crew from './src/crew.mjs';
 import * as brain from './src/brain.mjs';
 import * as eyes from './src/eyes.mjs';
 import { handsMode } from './src/hands.mjs';
+import { history as missionHistory, exportAll as exportMissions, purge as purgeMissions } from './src/missions.mjs';
+import { totalCost, usageSummary } from './src/costs.mjs';
+import { runAll as cleanupAll } from './src/cleanup.mjs';
+import { EXAMPLES, list as listTemplates, save as saveTemplate, remove as removeTemplate } from './src/templates.mjs';
+import { list as listSchedule, add as addSchedule, remove as removeSchedule, start as startSchedule, stop as stopSchedule } from './src/schedule.mjs';
 
 // ── terminal dressing ─────────────────────────────────────────────────────────
 

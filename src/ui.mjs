@@ -685,11 +685,8 @@ ${FACE_CSS}
   // ── cost display ────────────────────────────────────────────────────────
   function updateCost() {
     api('/api/health').then(function (h) {
-      $('tag-cost').innerHTML = 'cost <b>
-</script>
-`;
-}
- + (h.cost || 0).toFixed(2) + '</b>';
+      var d = (h.cost || 0).toFixed(2);
+      $('tag-cost').innerHTML = 'cost <b>' + d + '</b>';
     }).catch(function () {});
   }
   updateCost();
