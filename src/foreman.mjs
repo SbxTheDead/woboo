@@ -316,9 +316,30 @@ const SETS_OWN_EXIT =
 // what was meant. It is an artefact of the plan travelling as JSON, so it is
 // fixed here rather than asked for politely in a prompt.
 export function unescapePaths(command) {
-  return String(command || '').replace(/'([^']*)'/g, (whole, inner) =>
-    /[A-Za-z]:\\\\|\\\\\w/.test(inner) ? `'${inner.replace(/\\{2,}/g, '\\')}'` : whole,
-  );
+  return String(command || '')
+    // Fix doubled backslashes from JSON: 'D:\\\\woboo' -> 'D:\\woboo'
+    .replace(/'([^']*)'/g, (whole, inner) =>
+      /[A-Za-z]:\\\\|\\\\\w/.test(inner) ? `'${inner.replace(/\\{2,}/g, '\\')}'` : whole,
+    )
+    // Single-quoted paths containing $env: or $variable — PowerShell does not expand
+    // variables inside single quotes, so '& '$env:TEMP\\installer.exe' tries to run a
+    // file literally called "$env:TEMP". Switch to double quotes so the variable resolves.
+    // Also fix forward slashes to backslashes inside those paths.
+    .replace(/'([^']*)'/g, (whole, inner) => {
+      if (/\$env:|\$[A-Z_]+/i.test(inner) && /[\/]/.test(inner)) {
+        const fixed = inner.replace(/\//g, '\\');
+        return `"${fixed}"`;
+      }
+      if (/\$env:|\$[A-Z_]+/i.test(inner)) {
+        return `"${inner}"`;
+      }
+      return whole;
+    })
+    // Forward slashes in paths that are NOT inside quotes: $env:TEMP/installer.exe
+    // Only fix when it looks like a path (contains a dot or extension after the slash).
+    .replace(/(\$env:\w+|\$[A-Z_]+)(\/[\w.]+)/gi, (whole, variable, rest) =>
+      variable + rest.replace(/\//g, '\\'),
+    );
 }
 
 // The file that was actually produced, when the plan named one that was not.
