@@ -255,6 +255,17 @@ export async function browse({ goal, url = null, maxSteps = 14, ask, onProgress 
     }
 
     if (recent.length >= 3 && recent.slice(-3).every((s) => s === signature)) {
+      // A goto that triggers a file download leaves the page blank — 0 elements, same URL
+      // pattern repeating. Without this check the webpilot reports "stuck" on a download that
+      // is actually working fine (e.g. VS Code installer). Check the browser's download state
+      // before declaring failure.
+      if (decision.action === 'goto' && browser.isDownloading()) {
+        const name = browser.lastDownloadFilename() || 'file';
+        say(`download in progress: ${name} — the page is blank because the file is saving, not because navigation failed`, 'ok');
+        recent.length = 0;
+        history.push(`${step}. goto triggered download: ${name} (page is blank because the file is saving)`);
+        continue;
+      }
       setFace('confused', 'stuck in a loop');
       return {
         ok: false,
@@ -310,6 +321,15 @@ export async function browse({ goal, url = null, maxSteps = 14, ask, onProgress 
         const target = String(decision.text || '').trim();
         if (/^(https?:\/\/|www\.)|^[\w-]+\.[a-z]{2,}(\/|$)/i.test(target)) {
           await browser.goto(target);
+          // A goto that triggers a download leaves the page blank. Detect it here so
+          // the history tells the model what happened instead of showing "went to URL"
+          // followed by three blank-page retries.
+          if (browser.isDownloading()) {
+            const name = browser.lastDownloadFilename() || 'file';
+            say(`download started: ${name}`, 'ok');
+            history.push(`${step}. goto ${target.slice(0, 60)} — download started: ${name}`);
+            continue;
+          }
         } else if (target) {
           record('web', `"${target.slice(0, 40)}" is not a url — searching for it instead`, { level: 'warn' });
           await browser.goto(`https://duckduckgo.com/?q=${encodeURIComponent(target)}&kl=us-en`);

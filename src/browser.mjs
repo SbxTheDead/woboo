@@ -32,6 +32,15 @@ const pending = new Map();
 let child = null;
 let loading = 0;
 
+// Track downloads so the webpilot knows a blank page after goto is a download, not a failure.
+// Chrome fires Page.downloadWillBegin when a navigation turns into a file save, and
+// Page.downloadProgress as it proceeds. A VS Code installer link triggers a download and
+// leaves the page on about:blank — without this, the webpilot sees 0 elements, retries
+// goto three times, and reports "stuck" even though the download is working fine.
+let activeDownloads = 0;
+let lastDownloadGuid = null;
+let lastDownloadName = '';
+
 // One JavaScript world per frame.
 //
 // Gmail draws its entire interface — the message list, the compose window,
@@ -156,6 +165,23 @@ export async function attach(wsUrl, { title = '', url = '' } = {}) {
     if (message.method === 'Page.frameStartedLoading') loading += 1;
     if (message.method === 'Page.frameStoppedLoading') loading = Math.max(0, loading - 1);
 
+    // Download tracking: a goto that triggers a file save leaves the page blank.
+    // Without this, the webpilot thinks the navigation failed and retries three times.
+    if (message.method === 'Page.downloadWillBegin') {
+      activeDownloads += 1;
+      lastDownloadGuid = message.params.guid || null;
+      lastDownloadName = message.params.suggestedFilename || '';
+      record('browser', `download started: ${lastDownloadName}`, { level: 'ok' });
+    }
+    if (message.method === 'Page.downloadProgress') {
+      if (message.params.state === 'completed') {
+        activeDownloads = Math.max(0, activeDownloads - 1);
+        record('browser', `download completed: ${lastDownloadName}`, { level: 'ok' });
+      } else if (message.params.state === 'canceled') {
+        activeDownloads = Math.max(0, activeDownloads - 1);
+      }
+    }
+
     // Every frame is its own JavaScript world, and the interesting one is
     // usually not the top. Track them as Chrome announces them.
     if (message.method === 'Runtime.executionContextCreated') {
@@ -201,6 +227,9 @@ export async function attach(wsUrl, { title = '', url = '' } = {}) {
   });
 
   await send('Page.enable');
+  // Tell Chrome to allow downloads rather than blocking them. Without this,
+  // a file download from goto would be silently refused and the page would stay blank.
+  await send('Page.setDownloadBehavior', { behavior: 'allow', downloadPath: '' }).catch(() => {});
   await send('Runtime.enable');
   await surface();
   record('browser', 'attached', { level: 'ok' });
@@ -360,6 +389,17 @@ function frameOf(index) {
   return elementFrames[Number(index)] ?? null;
 }
 
+// Whether a download is currently in progress — the webpilot uses this to
+// distinguish "the page is blank because a file is saving" from "the page is
+// blank because the navigation failed".
+export function isDownloading() {
+  return activeDownloads > 0;
+}
+
+export function lastDownloadFilename() {
+  return lastDownloadName;
+}
+
 export function close() {
   try {
     socket?.close();
@@ -371,6 +411,9 @@ export function close() {
   contexts.clear();
   elementFrames = [];
   screenOffset = null;
+  activeDownloads = 0;
+  lastDownloadGuid = null;
+  lastDownloadName = '';
 }
 
 // ── what is on the page ───────────────────────────────────────────────────────
