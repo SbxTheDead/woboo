@@ -81,6 +81,22 @@ const DEFAULTS = {
   allowCommands: [],
   // The one Telegram chat allowed to drive Woboo. Set by pairing, not by hand.
   telegramChatId: null,
+  // Multi-brain routing: 'auto' routes by complexity, 'fixed' uses provider.
+  routing: 'auto',
+  // Sandbox shell commands for isolation.
+  sandbox: false,
+  // Skin for the face.
+  skin: 'default',
+  // TTS voice.
+  ttsVoice: 'alloy',
+  // Webhooks.
+  webhooks: [],
+  // MCP servers.
+  mcpServers: {},
+  // Streaming output in dashboard.
+  streaming: true,
+  // Parallel step execution.
+  parallel: false,
 };
 
 export function ensureHome() {

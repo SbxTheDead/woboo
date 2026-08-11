@@ -17,6 +17,8 @@ import { describe as describeTools } from './toolbox.mjs';
 import { describe as describeReach } from './capabilities.mjs';
 import { record } from './journal.mjs';
 import { recordUsage } from './costs.mjs';
+import { route } from './router.mjs';
+import { allTools } from './mcp.mjs';
 
 const PLAN_SCHEMA = {
   type: 'object',

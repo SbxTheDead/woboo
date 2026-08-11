@@ -12,6 +12,8 @@ import { publish } from './bus.mjs';
 import { record } from './journal.mjs';
 import { save as saveMission, load as loadMission } from './missions.mjs';
 import { emit } from './plugins.mjs';
+import { snapshot, rollback } from './snapshot.mjs';
+import { loadSettings } from './config.mjs';
 import { setFace } from './face.mjs';
 import { assertLive, isStopped, stopReason, Halted, Refused } from './guard.mjs';
 import * as brain from './brain.mjs';

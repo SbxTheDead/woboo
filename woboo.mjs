@@ -32,6 +32,12 @@ import { totalCost, usageSummary } from './src/costs.mjs';
 import { runAll as cleanupAll } from './src/cleanup.mjs';
 import { EXAMPLES, list as listTemplates, save as saveTemplate, remove as removeTemplate } from './src/templates.mjs';
 import { list as listSchedule, add as addSchedule, remove as removeSchedule, start as startSchedule, stop as stopSchedule } from './src/schedule.mjs';
+import { listServers, addServer, removeServer, connectAll, allTools } from './src/mcp.mjs';
+import { route } from './src/router.mjs';
+import { overview as analyticsOverview, dailyBreakdown } from './src/analytics.mjs';
+import { list as listSkins, set as setSkin } from './src/skins.mjs';
+import { list as listWebhooks, add as addWebhook, remove as removeWebhook } from './src/webhooks.mjs';
+import { list as listSnapshots, rollback } from './src/snapshot.mjs';
 
 // ── terminal dressing ─────────────────────────────────────────────────────────
 
