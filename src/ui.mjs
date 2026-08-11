@@ -146,6 +146,27 @@ ${FACE_CSS}
   #shot { display: block; width: 100%; }
 
   .col-work { display: grid; grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); min-height: 0; }
+  .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--line); }
+  .tab { padding: 6px 14px; font-size: 11px; letter-spacing: 2px; color: var(--dim); cursor: pointer; border-bottom: 2px solid transparent; background: none; border-top: none; border-left: none; border-right: none; border-radius: 0; }
+  .tab:hover { color: var(--ink); }
+  .tab.active { color: var(--fc); border-bottom-color: var(--fc); }
+  .tab:focus-visible { outline: 2px solid var(--fc); outline-offset: -2px; }
+  .cost-tag { font-size: 10px; color: var(--dim); }
+  .cost-tag b { color: var(--fc); }
+  .history-item { padding: 8px 0; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .history-item:hover { background: rgba(255,255,255,.03); }
+  .history-item .hi-task { color: var(--ink); font-size: 12px; }
+  .history-item .hi-meta { color: var(--dim); font-size: 10px; margin-top: 2px; }
+  .history-item .hi-state { font-size: 10px; padding: 1px 5px; border-radius: 3px; border: 1px solid var(--line); margin-left: 6px; }
+  .history-item .hi-state.done { color: var(--ok); border-color: rgba(127,209,160,.3); }
+  .history-item .hi-state.failed { color: var(--bad); border-color: rgba(255,90,61,.3); }
+  .settings-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
+  .settings-row label { color: var(--dim); font-size: 11px; min-width: 120px; }
+  .settings-row input, .settings-row select { font: inherit; background: rgba(0,0,0,.36); color: var(--ink); border: 1px solid var(--line); border-radius: 4px; padding: 5px 8px; }
+  .settings-row input:focus, .settings-row select:focus { outline: none; border-color: var(--fc); }
+  .template-chip { display: inline-block; padding: 4px 10px; border: 1px solid var(--line); border-radius: 12px; font-size: 11px; color: var(--dim); cursor: pointer; margin: 2px 4px 2px 0; }
+  .template-chip:hover { border-color: var(--fc); color: var(--ink); }
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
   .panel { display: flex; flex-direction: column; min-height: 0; padding: 12px 14px; }
   .panel + .panel { border-top: 1px solid var(--line); }
   .panel h2 {
@@ -226,6 +247,7 @@ ${FACE_CSS}
     <span class="tag" id="tag-crew">crew <b>…</b></span>
     <span class="tag" id="tag-hands">hands <b>…</b></span>
     <span class="tag" id="tag-ws">workspace <b>…</b></span>
+    <span class="cost-tag" id="tag-cost">cost <b>$0.00</b></span>
     <span class="spacer"></span>
     <span class="tag" id="tag-link">connecting…</span>
   </header>
@@ -242,8 +264,8 @@ ${FACE_CSS}
         <b id="face-state">idle</b>
         <span id="face-note"></span>
       </div>
-      <button class="stop" id="btn-stop">STOP</button>
-      <button class="resume hidden" id="btn-resume">RELEASE STOP</button>
+      <button class="stop" id="btn-stop" aria-label="Stop current mission">STOP</button>
+      <button class="resume hidden" id="btn-resume" aria-label="Resume after stop">RELEASE STOP</button>
       <div class="mini">
         <button id="btn-look">LOOK</button>
         <button id="btn-selftest">SELF-TEST</button>
@@ -254,20 +276,31 @@ ${FACE_CSS}
     </section>
 
     <section class="col-work">
-      <div class="panel">
-        <h2>MISSION</h2>
-        <div id="mission"><p class="empty">No mission yet. Type a task below.</p></div>
+      <div class="panel" id="panel-top">
+        <div class="tabs" role="tablist" aria-label="Work panels">
+          <button class="tab active" role="tab" aria-selected="true" aria-controls="mission" id="tab-mission" data-panel="mission">MISSION</button>
+          <button class="tab" role="tab" aria-selected="false" aria-controls="history" id="tab-history" data-panel="history">HISTORY</button>
+          <button class="tab" role="tab" aria-selected="false" aria-controls="settings" id="tab-settings" data-panel="settings">SETTINGS</button>
+        </div>
+        <div id="mission" role="tabpanel" aria-labelledby="tab-mission"><p class="empty">No mission yet. Type a task below.</p></div>
+        <div id="history" class="hidden" role="tabpanel" aria-labelledby="tab-history"><p class="empty">Loading history…</p></div>
+        <div id="settings" class="hidden" role="tabpanel" aria-labelledby="tab-settings">
+          <div class="settings-row"><label for="set-brain">Brain</label><select id="set-brain"><option value="anthropic">Anthropic</option><option value="nim">NVIDIA NIM</option></select></div>
+          <div class="settings-row"><label for="set-notify">Notifications</label><input type="checkbox" id="set-notify" checked></div>
+          <div class="settings-row"><label for="set-verify">Verify every step</label><input type="checkbox" id="set-verify" checked></div>
+          <div class="settings-row"><label>Actions</label><button id="btn-cleanup">Clean up old data</button> <button id="btn-export">Export history</button></div>
+        </div>
       </div>
       <div class="panel">
-        <h2>JOURNAL</h2>
-        <div id="log"></div>
+        <h2 id="journal-heading" role="heading" aria-level="2">JOURNAL</h2>
+        <div id="log" role="log" aria-live="polite" aria-labelledby="journal-heading"></div>
       </div>
     </section>
   </main>
 
   <footer>
     <span class="prompt">&gt;</span>
-    <input id="task" placeholder="give Woboo a task…" autocomplete="off" spellcheck="false">
+    <input id="task" placeholder="give Woboo a task…" autocomplete="off" spellcheck="false" aria-label="Task input">
     <button id="btn-send">SEND</button>
   </footer>
 </div>
@@ -567,6 +600,116 @@ ${FACE_CSS}
   // Space is a habit for "stop"; Escape denies whatever is being asked.
   document.addEventListener('keydown', function (event) {
     if (event.key === 'Escape' && approvals[0]) resolve(approvals[0].id, 'deny');
+  });
+
+  // ── tab switching ──────────────────────────────────────────────────────
+  var tabs = document.querySelectorAll('.tab');
+  var panels = ['mission', 'history', 'settings'];
+  tabs.forEach(function (tab) {
+    tab.addEventListener('click', function () {
+      tabs.forEach(function (t) { t.classList.remove('active'); t.setAttribute('aria-selected', 'false'); });
+      tab.classList.add('active');
+      tab.setAttribute('aria-selected', 'true');
+      panels.forEach(function (p) {
+        var el = document.getElementById(p);
+        if (el) el.classList.toggle('hidden', p !== tab.dataset.panel);
+      });
+      if (tab.dataset.panel === 'history') loadHistory();
+    });
+  });
+
+  // ── mission history ─────────────────────────────────────────────────────
+  function loadHistory() {
+    api('/api/history').then(function (missions) {
+      var host = $('history');
+      if (!missions || !missions.length) {
+        host.innerHTML = '<p class="empty">No mission history yet.</p>';
+        return;
+      }
+      var html = '';
+      missions.forEach(function (m) {
+        var dur = m.duration ? m.duration + 's' : 'running';
+        var stateClass = m.state === 'done' ? 'done' : m.state === 'failed' ? 'failed' : '';
+        html += '<div class="history-item" data-id="' + esc(m.id) + '">' +
+          '<div class="hi-task">' + esc(m.task) +
+          '<span class="hi-state ' + stateClass + '">' + esc(m.state) + '</span></div>' +
+          '<div class="hi-meta">' + dur + ' · ' + (m.steps || 0) + ' steps · ' + clock(m.startedAt) + '</div>' +
+          '</div>';
+      });
+      host.innerHTML = html;
+      host.querySelectorAll('.history-item').forEach(function (item) {
+        item.addEventListener('click', function () {
+          toast('Mission ' + item.dataset.id);
+        });
+      });
+    }).catch(function () {
+      $('history').innerHTML = '<p class="empty">Could not load history.</p>';
+    });
+  }
+
+  // ── desktop notifications ───────────────────────────────────────────────
+  var notifyEnabled = true;
+  if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+    // Will ask on first mission complete
+  }
+  function notifyMissionDone(mission) {
+    if (!notifyEnabled || !mission) return;
+    if (typeof Notification === 'undefined') return;
+    if (Notification.permission === 'granted') {
+      new Notification('Woboo: Mission complete', {
+        body: mission.task || 'Task finished',
+        silent: false
+      });
+    } else if (Notification.permission === 'default') {
+      Notification.requestPermission().then(function (perm) {
+        if (perm === 'granted') notifyMissionDone(mission);
+      });
+    }
+  }
+
+  // ── settings actions ────────────────────────────────────────────────────
+  var btnCleanup = $('btn-cleanup');
+  if (btnCleanup) btnCleanup.onclick = function () {
+    api('/api/cleanup', {}).then(function (r) {
+      toast('Cleaned ' + (r.shotsRemoved || 0) + ' screenshots');
+    }).catch(function (e) { toast(e.message); });
+  };
+  var btnExport = $('btn-export');
+  if (btnExport) btnExport.onclick = function () {
+    window.open('/api/export?key=' + encodeURIComponent(KEY), '_blank');
+    toast('Exporting mission history…');
+  };
+  var setNotify = $('set-notify');
+  if (setNotify) setNotify.onchange = function () { notifyEnabled = setNotify.checked; };
+
+  // ── cost display ────────────────────────────────────────────────────────
+  function updateCost() {
+    api('/api/health').then(function (h) {
+      $('tag-cost').innerHTML = 'cost <b>
+</script>
+`;
+}
+ + (h.cost || 0).toFixed(2) + '</b>';
+    }).catch(function () {});
+  }
+  updateCost();
+  setInterval(updateCost, 60000);
+
+  // ── notify on mission done ──────────────────────────────────────────────
+  var origHandle = handle;
+  handle = function (event) {
+    origHandle(event);
+    if (event.type === 'mission' && event.mission && event.mission.state === 'done') {
+      notifyMissionDone(event.mission);
+    }
+  };
+
+  // ── keyboard accessibility ──────────────────────────────────────────────
+  document.addEventListener('keydown', function (event) {
+    // Ctrl+1/2/3 to switch tabs
+    if (event.ctrlKey && event.key === '1') { document.getElementById('tab-mission').click(); }
+    if (event.ctrlKey && event.key === '2') { document.getElementById('tab-history').click(); }
+    if (event.ctrlKey && event.key === '3') { document.getElementById('tab-settings').click(); }
   });
 
   drawFace({ state: 'idle', note: '' });
