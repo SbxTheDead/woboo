@@ -281,13 +281,16 @@ ${FACE_CSS}
           <button class="tab active" role="tab" aria-selected="true" aria-controls="mission" id="tab-mission" data-panel="mission">MISSION</button>
           <button class="tab" role="tab" aria-selected="false" aria-controls="history" id="tab-history" data-panel="history">HISTORY</button>
           <button class="tab" role="tab" aria-selected="false" aria-controls="settings" id="tab-settings" data-panel="settings">SETTINGS</button>
+          <button class="tab" role="tab" aria-selected="false" aria-controls="analytics" id="tab-analytics" data-panel="analytics">ANALYTICS</button>
         </div>
         <div id="mission" role="tabpanel" aria-labelledby="tab-mission"><p class="empty">No mission yet. Type a task below.</p></div>
         <div id="history" class="hidden" role="tabpanel" aria-labelledby="tab-history"><p class="empty">Loading history…</p></div>
+        <div id="analytics" class="hidden" role="tabpanel" aria-labelledby="tab-analytics"><p class="empty">Loading analytics...</p></div>
         <div id="settings" class="hidden" role="tabpanel" aria-labelledby="tab-settings">
           <div class="settings-row"><label for="set-brain">Brain</label><select id="set-brain"><option value="anthropic">Anthropic</option><option value="nim">NVIDIA NIM</option></select></div>
           <div class="settings-row"><label for="set-notify">Notifications</label><input type="checkbox" id="set-notify" checked></div>
           <div class="settings-row"><label for="set-verify">Verify every step</label><input type="checkbox" id="set-verify" checked></div>
+          <div class="settings-row"><label for="set-skin">Skin</label><select id="set-skin"><option value="default">Default</option><option value="ocean">Ocean</option><option value="forest">Forest</option><option value="sunset">Sunset</option><option value="mono">Mono</option><option value="neon">Neon</option></select></div>
           <div class="settings-row"><label>Actions</label><button id="btn-cleanup">Clean up old data</button> <button id="btn-export">Export history</button></div>
         </div>
       </div>
@@ -604,7 +607,7 @@ ${FACE_CSS}
 
   // ── tab switching ──────────────────────────────────────────────────────
   var tabs = document.querySelectorAll('.tab');
-  var panels = ['mission', 'history', 'settings'];
+  var panels = ['mission', 'history', 'settings', 'analytics'];
   tabs.forEach(function (tab) {
     tab.addEventListener('click', function () {
       tabs.forEach(function (t) { t.classList.remove('active'); t.setAttribute('aria-selected', 'false'); });
@@ -615,6 +618,7 @@ ${FACE_CSS}
         if (el) el.classList.toggle('hidden', p !== tab.dataset.panel);
       });
       if (tab.dataset.panel === 'history') loadHistory();
+      if (tab.dataset.panel === 'analytics') loadAnalytics();
     });
   });
 
@@ -699,6 +703,85 @@ ${FACE_CSS}
     if (event.type === 'mission' && event.mission && event.mission.state === 'done') {
       notifyMissionDone(event.mission);
     }
+  };
+
+  // ── analytics ─────────────────────────────────────────────────────
+  function loadAnalytics() {
+    api('/api/analytics').then(function (data) {
+      var o = data.overview;
+      var html = '<div style="padding:10px">';
+      html += '<div class="summary"><b>Missions</b>: ' + o.missions.total + ' (success: ' + o.missions.successRate + '%)</div>';
+      html += '<div class="summary"><b>Avg Duration</b>: ' + o.duration.avg + 's</div>';
+      html += '<div class="summary"><b>Avg Steps</b>: ' + o.steps.avg + '</div>';
+      html += '<div class="summary"><b>Cost</b>:  ──────────────────────────────────────────────
+  document.addEventListener('keydown', function (event) {
+    // Ctrl+1/2/3 to switch tabs
+    if (event.ctrlKey && event.key === '1') { document.getElementById('tab-mission').click(); }
+    if (event.ctrlKey && event.key === '2') { document.getElementById('tab-history').click(); }
+    if (event.ctrlKey && event.key === '3') { document.getElementById('tab-settings').click(); }
+  });
+
+  drawFace({ state: 'idle', note: '' });
+  connect();
+})();
+</script>
+`;
+}
+ + o.costs.total + ' (7d:  ──────────────────────────────────────────────
+  document.addEventListener('keydown', function (event) {
+    // Ctrl+1/2/3 to switch tabs
+    if (event.ctrlKey && event.key === '1') { document.getElementById('tab-mission').click(); }
+    if (event.ctrlKey && event.key === '2') { document.getElementById('tab-history').click(); }
+    if (event.ctrlKey && event.key === '3') { document.getElementById('tab-settings').click(); }
+  });
+
+  drawFace({ state: 'idle', note: '' });
+  connect();
+})();
+</script>
+`;
+}
+ + o.costs.last7d + ')</div>';
+      html += '<h3 style="margin-top:14px;font-size:11px;letter-spacing:2px;color:var(--dim)">DAILY</h3>';
+      (data.daily || []).forEach(function (d) {
+        html += '<div style="display:flex;gap:10px;padding:3px 0;font-size:11px">';
+        html += '<span style="color:var(--dim);width:80px">' + d.day + '</span>';
+        html += '<span>' + d.missions + ' missions</span>';
+        html += '<span style="color:var(--ok)">' + d.done + ' ok</span>';
+        html += '<span style="color:var(--bad)">' + d.failed + ' fail</span>';
+        html += '<span style="color:var(--fc)"> ──────────────────────────────────────────────
+  document.addEventListener('keydown', function (event) {
+    // Ctrl+1/2/3 to switch tabs
+    if (event.ctrlKey && event.key === '1') { document.getElementById('tab-mission').click(); }
+    if (event.ctrlKey && event.key === '2') { document.getElementById('tab-history').click(); }
+    if (event.ctrlKey && event.key === '3') { document.getElementById('tab-settings').click(); }
+  });
+
+  drawFace({ state: 'idle', note: '' });
+  connect();
+})();
+</script>
+`;
+}
+ + d.cost.toFixed(2) + '</span>';
+        html += '</div>';
+      });
+      html += '</div>';
+      document.getElementById('analytics').innerHTML = html;
+    }).catch(function () {
+      document.getElementById('analytics').innerHTML = '<p class="empty">Could not load analytics.</p>';
+    });
+  }
+
+  // ── skin selector ─────────────────────────────────────────────────────
+  var setSkin = document.getElementById('set-skin');
+  if (setSkin) setSkin.onchange = function () {
+    api('/api/skins', { name: setSkin.value }).then(function (r) {
+      if (r.vars) {
+        for (var k in r.vars) document.documentElement.style.setProperty(k, r.vars[k]);
+      }
+      toast('Skin changed to ' + setSkin.value);
+    }).catch(function (e) { toast(e.message); });
   };
 
   // ── keyboard accessibility ──────────────────────────────────────────────

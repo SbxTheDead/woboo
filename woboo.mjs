@@ -38,6 +38,9 @@ import { overview as analyticsOverview, dailyBreakdown } from './src/analytics.m
 import { list as listSkins, set as setSkin } from './src/skins.mjs';
 import { list as listWebhooks, add as addWebhook, remove as removeWebhook } from './src/webhooks.mjs';
 import { list as listSnapshots, rollback } from './src/snapshot.mjs';
+import { runChain } from './src/chain.mjs';
+import { replay } from './src/replay.mjs';
+import { listSessions, sessionStatus } from './src/collab.mjs';
 
 // ── terminal dressing ─────────────────────────────────────────────────────────
 
