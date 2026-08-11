@@ -18,7 +18,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { PATHS, loadSettings } from './config.mjs';
+import { PATHS, loadSettings, resolveProxy } from './config.mjs';
 import { record } from './journal.mjs';
 import { assertLive } from './guard.mjs';
 import { browserPath } from './toolbox.mjs';
@@ -113,6 +113,9 @@ export async function open({ fresh = false } = {}) {
         // the model spent six steps clicking "Suche".
         '--lang=en-US',
         fresh ? '--incognito' : '',
+        // Proxy support: if HTTP_PROXY or HTTPS_PROXY is set, or the owner
+        // configured a proxy in settings, route all browser traffic through it.
+        resolveProxy() ? '--proxy-server=' + resolveProxy() : '',
         'about:blank',
       ].filter(Boolean),
       { detached: true, stdio: 'ignore' },

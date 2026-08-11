@@ -34,3 +34,12 @@ research/
 tmp/
 internship_output/
 *_output/
+
+# Data exports
+woboo-export-*.json
+
+# Plugins (owner-installed)
+plugins/
+
+# Vault
+secrets.enc

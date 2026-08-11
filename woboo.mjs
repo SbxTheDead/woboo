@@ -712,6 +712,8 @@ function parse(argv) {
 
 async function main() {
   loadEnv();
+  // Run data cleanup on boot — old screenshots, audit rotation.
+  try { const { runAll } = await import('./src/cleanup.mjs'); runAll(); } catch {}
   const { flags, rest } = parse(process.argv.slice(2));
   const [command, ...args] = rest;
 
