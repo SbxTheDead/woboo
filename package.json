@@ -1,7 +1,6 @@
 {
   "name": "woboo",
-  "version": "0.1.0",
-  "private": true,
+  "version": "0.2.0",
   "description": "A body for your AI. Give Woboo a task; it operates your PC, drives your coding tools, and tests the work before handing it back.",
   "author": "Rayane Sbaa <jbeyer52777@protonmail.com> (SbxTheDead)",
   "license": "MIT",
@@ -20,12 +19,24 @@
     "doctor": "node woboo.mjs doctor",
     "selftest": "node woboo.mjs selftest",
     "test": "node --experimental-test-module-mocks --test --test-concurrency=1 \"test/*.test.mjs\"",
-    "test:live": "node --experimental-test-module-mocks --test --test-concurrency=1 \"test/*.test.mjs\" \"test/live/*.test.mjs\""
+    "test:live": "node --experimental-test-module-mocks --test --test-concurrency=1 \"test/*.test.mjs\" \"test/live/*.test.mjs\"",
+    "setup": "node woboo.mjs setup"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.72.0"
-  },
-  "devDependencies": {
+    "@anthropic-ai/sdk": "^0.72.0",
     "electron": "^43.2.0"
+  },
+  "devDependencies": {},
+  "keywords": [
+    "ai-agent",
+    "pc-automation",
+    "browser-automation",
+    "task-automation",
+    "coding-agent",
+    "research-agent"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SbxTheDead/woboo.git"
   }
 }
