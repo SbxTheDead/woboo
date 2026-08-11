@@ -93,6 +93,15 @@ export function profileDir() {
   return path.join(PATHS.home, 'browser');
 }
 
+// Where Chrome saves downloads. Created on first use.
+// A real path is required — Browser.setDownloadBehavior rejects empty strings,
+// and without a valid path Chrome reports "something went wrong" on every download.
+export function downloadDir() {
+  const dir = path.join(PATHS.home, 'downloads');
+  try { fs.mkdirSync(dir, { recursive: true }); } catch { /* already exists */ }
+  return dir;
+}
+
 function profileArgs() {
   return [`--user-data-dir=${profileDir()}`];
 }
@@ -173,12 +182,14 @@ export async function attach(wsUrl, { title = '', url = '' } = {}) {
       lastDownloadName = message.params.suggestedFilename || '';
       record('browser', `download started: ${lastDownloadName}`, { level: 'ok' });
     }
-    if (message.method === 'Page.downloadProgress') {
+    if (message.method === 'Page.downloadProgress' || message.method === 'Browser.downloadUpdated') {
       if (message.params.state === 'completed') {
         activeDownloads = Math.max(0, activeDownloads - 1);
         record('browser', `download completed: ${lastDownloadName}`, { level: 'ok' });
-      } else if (message.params.state === 'canceled') {
-        activeDownloads = Math.max(0, activeDownloads - 1);
+      } else if (message.params.state === 'canceled' || message.params.state === 'inProgress') {
+        if (message.params.state === 'canceled') {
+          activeDownloads = Math.max(0, activeDownloads - 1);
+        }
       }
     }
 
@@ -227,9 +238,18 @@ export async function attach(wsUrl, { title = '', url = '' } = {}) {
   });
 
   await send('Page.enable');
-  // Tell Chrome to allow downloads rather than blocking them. Without this,
-  // a file download from goto would be silently refused and the page would stay blank.
-  await send('Page.setDownloadBehavior', { behavior: 'allow', downloadPath: '' }).catch(() => {});
+  // Enable the Browser domain so download events fire and downloads are allowed.
+  // Page.setDownloadBehavior does not exist — the correct domain is Browser.
+  // Without this, Chrome blocks or silently fails downloads from automated navigation,
+  // the page stays blank, and the webpilot reports "stuck" on a download that should work.
+  await send('Browser.enable').catch(() => {});
+  await send('Browser.setDownloadBehavior', {
+    behavior: 'allow',
+    downloadPath: downloadDir(),
+    eventsEnabled: true,
+  }).catch((err) => {
+    record('browser', 'could not set download behavior: ' + (err.message || 'unknown'), { level: 'warn' });
+  });
   await send('Runtime.enable');
   await surface();
   record('browser', 'attached', { level: 'ok' });
@@ -613,9 +633,16 @@ export async function goto(url) {
   const target = /^https?:\/\//i.test(url) ? url : `https://${url}`;
   await send('Page.navigate', { url: target });
   await settle();
+  // Download events arrive after the redirect chain resolves, which can be
+  // slower than settle() returns. Give them a moment to land before the
+  // webpilot checks isDownloading() — otherwise a real download looks like
+  // a blank page and gets reported as stuck.
+  if (activeDownloads === 0) {
+    await new Promise((r) => setTimeout(r, 800));
+  }
   // Remember where we have been, so "back" has somewhere to go.
   record('browser', `went to ${target}`);
-  return { ok: true, url: target };
+  return { ok: true, url: target, download: activeDownloads > 0, downloadName: lastDownloadName };
 }
 
 // A click by identity, not by coordinate. The element is the one the model named,
