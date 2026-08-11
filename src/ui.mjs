@@ -705,43 +705,17 @@ ${FACE_CSS}
     }
   };
 
+
   // ── analytics ─────────────────────────────────────────────────────
   function loadAnalytics() {
     api('/api/analytics').then(function (data) {
       var o = data.overview;
+      var D = String.fromCharCode(36);
       var html = '<div style="padding:10px">';
       html += '<div class="summary"><b>Missions</b>: ' + o.missions.total + ' (success: ' + o.missions.successRate + '%)</div>';
       html += '<div class="summary"><b>Avg Duration</b>: ' + o.duration.avg + 's</div>';
       html += '<div class="summary"><b>Avg Steps</b>: ' + o.steps.avg + '</div>';
-      html += '<div class="summary"><b>Cost</b>:  ──────────────────────────────────────────────
-  document.addEventListener('keydown', function (event) {
-    // Ctrl+1/2/3 to switch tabs
-    if (event.ctrlKey && event.key === '1') { document.getElementById('tab-mission').click(); }
-    if (event.ctrlKey && event.key === '2') { document.getElementById('tab-history').click(); }
-    if (event.ctrlKey && event.key === '3') { document.getElementById('tab-settings').click(); }
-  });
-
-  drawFace({ state: 'idle', note: '' });
-  connect();
-})();
-</script>
-`;
-}
- + o.costs.total + ' (7d:  ──────────────────────────────────────────────
-  document.addEventListener('keydown', function (event) {
-    // Ctrl+1/2/3 to switch tabs
-    if (event.ctrlKey && event.key === '1') { document.getElementById('tab-mission').click(); }
-    if (event.ctrlKey && event.key === '2') { document.getElementById('tab-history').click(); }
-    if (event.ctrlKey && event.key === '3') { document.getElementById('tab-settings').click(); }
-  });
-
-  drawFace({ state: 'idle', note: '' });
-  connect();
-})();
-</script>
-`;
-}
- + o.costs.last7d + ')</div>';
+      html += '<div class="summary"><b>Cost</b>: ' + D + o.costs.total + ' (7d: ' + D + o.costs.last7d + ')</div>';
       html += '<h3 style="margin-top:14px;font-size:11px;letter-spacing:2px;color:var(--dim)">DAILY</h3>';
       (data.daily || []).forEach(function (d) {
         html += '<div style="display:flex;gap:10px;padding:3px 0;font-size:11px">';
@@ -749,21 +723,7 @@ ${FACE_CSS}
         html += '<span>' + d.missions + ' missions</span>';
         html += '<span style="color:var(--ok)">' + d.done + ' ok</span>';
         html += '<span style="color:var(--bad)">' + d.failed + ' fail</span>';
-        html += '<span style="color:var(--fc)"> ──────────────────────────────────────────────
-  document.addEventListener('keydown', function (event) {
-    // Ctrl+1/2/3 to switch tabs
-    if (event.ctrlKey && event.key === '1') { document.getElementById('tab-mission').click(); }
-    if (event.ctrlKey && event.key === '2') { document.getElementById('tab-history').click(); }
-    if (event.ctrlKey && event.key === '3') { document.getElementById('tab-settings').click(); }
-  });
-
-  drawFace({ state: 'idle', note: '' });
-  connect();
-})();
-</script>
-`;
-}
- + d.cost.toFixed(2) + '</span>';
+        html += '<span style="color:var(--fc)">' + D + d.cost.toFixed(2) + '</span>';
         html += '</div>';
       });
       html += '</div>';
@@ -786,10 +746,10 @@ ${FACE_CSS}
 
   // ── keyboard accessibility ──────────────────────────────────────────────
   document.addEventListener('keydown', function (event) {
-    // Ctrl+1/2/3 to switch tabs
     if (event.ctrlKey && event.key === '1') { document.getElementById('tab-mission').click(); }
     if (event.ctrlKey && event.key === '2') { document.getElementById('tab-history').click(); }
     if (event.ctrlKey && event.key === '3') { document.getElementById('tab-settings').click(); }
+    if (event.ctrlKey && event.key === '4') { document.getElementById('tab-analytics').click(); }
   });
 
   drawFace({ state: 'idle', note: '' });
