@@ -196,3 +196,42 @@ export function ownerKey() {
   fs.writeFileSync(PATHS.ownerKey, `${minted}\n`, { mode: 0o600 });
   return minted;
 }
+
+
+// Loading .env from the current working directory. Lets the owner set
+// ANTHROPIC_API_KEY, TAVILY_API_KEY, NVIDIA_API_KEY, TELEGRAM_BOT_TOKEN,
+// HTTP_PROXY, HTTPS_PROXY without touching secrets.json.
+export function loadEnv() {
+  const envPath = process.cwd() + '/.env';
+  try {
+    const data = fs.readFileSync(envPath, 'utf8');
+    for (const line of data.split('\n')) {
+      const match = line.match(/^([A-Z_][A-Z0-9_]*)\s*=\s*(.*)$/);
+      if (!match) continue;
+      const [, key, raw] = match;
+      const value = raw.replace(/^['"]|['"]$/g, '').trim();
+      if (!process.env[key]) process.env[key] = value;
+    }
+  } catch {
+    // No .env file — that is fine.
+  }
+}
+
+// Resolving the proxy URL from environment or settings.
+export function resolveProxy() {
+  return (
+    process.env.HTTPS_PROXY ||
+    process.env.HTTP_PROXY ||
+    loadSettings().proxy ||
+    null
+  );
+}
+
+// Default settings additions for cost tracking and scheduling.
+export function applyDefaults(settings) {
+  if (settings.totalCost === undefined) settings.totalCost = 0;
+  if (!settings.templates) settings.templates = [];
+  if (!settings.schedule) settings.schedule = [];
+  if (settings.notifications === undefined) settings.notifications = true;
+  return settings;
+}

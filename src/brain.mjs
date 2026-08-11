@@ -16,6 +16,7 @@ import * as nim from './nim.mjs';
 import { describe as describeTools } from './toolbox.mjs';
 import { describe as describeReach } from './capabilities.mjs';
 import { record } from './journal.mjs';
+import { recordUsage } from './costs.mjs';
 
 const PLAN_SCHEMA = {
   type: 'object',
@@ -460,6 +461,22 @@ export function redirectWebFetches(plan) {
     step.verify = '';
   }
   return plan;
+}
+
+// Retrying with exponential backoff. API calls fail — rate limits, transient
+// errors, network hiccups. Three attempts with a delay that doubles each time
+// is enough to survive a rate limit without making the owner wait forever.
+async function retryWithBackoff(fn, { maxAttempts = 3, baseDelay = 1000 } = {}) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn(attempt);
+    } catch (err) {
+      if (attempt === maxAttempts) throw err;
+      const delay = baseDelay * Math.pow(2, attempt - 1);
+      record('brain', 'attempt ' + attempt + ' failed, retrying in ' + delay + 'ms', { level: 'warn' });
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
 }
 
 export async function plan({ task, workspace, crew, memory = '' }) {

@@ -711,6 +711,7 @@ function parse(argv) {
 }
 
 async function main() {
+  loadEnv();
   const { flags, rest } = parse(process.argv.slice(2));
   const [command, ...args] = rest;
 
