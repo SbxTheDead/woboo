@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { evidenceFor, obviousShortfall, check, categorize } from '../src/acceptance.mjs';
+import { evidenceFor, obviousShortfall, check, categorize, provenByCommands } from '../src/acceptance.mjs';
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'woboo-accept-'));
 const file = (name, body) => {
@@ -50,6 +50,47 @@ test('an empty file is a shortfall — unless an empty file is what was asked fo
   // the failure.
   assert.equal(obviousShortfall([blank], ['Five empty text files: file1.txt … file5.txt on the Desktop']), null);
   assert.equal(obviousShortfall([blank], ['A blank file1.txt']), null);
+});
+
+test('a faithful copy or rename of an empty file is not a shortfall', () => {
+  // "rename file2.txt to file2_renamed.txt" and "copy file3.txt to
+  // file3_backup.txt": the sources were empty, so the outputs are empty, and
+  // that is the operation done correctly — not a report that came out blank.
+  const renamed = file('file2_renamed.txt', '');
+  const backup = file('file3_backup.txt', '');
+  assert.equal(obviousShortfall([renamed], ['The file file2.txt is renamed to file2_renamed.txt']), null);
+  assert.equal(obviousShortfall([backup], ['file3.txt copied to file3_backup.txt']), null);
+  // But an empty *document* is still caught.
+  assert.match(obviousShortfall([file('r.md', '')], ['A report on the findings in r.md']) || '', /empty/i);
+});
+
+test('a delete or move owes no file left behind', () => {
+  // "delete file5.txt" and "move file4.txt to Documents" end with nothing in
+  // the workspace, and that is the job done — not "no file was produced".
+  assert.equal(obviousShortfall([], ['file5.txt deleted from the test_output folder']), null);
+  assert.equal(obviousShortfall([], ['file4.txt moved to my Documents folder']), null);
+  // A copy or a report still owes its file.
+  assert.match(obviousShortfall([], ['file3.txt copied to file3_backup.txt']) || '', /no file/i);
+  assert.match(obviousShortfall([], ['A summary in report.pdf']) || '', /no file/i);
+});
+
+test('a file operation proven by its command check needs no model judge', () => {
+  const op = (deliverable, status = 'ok') => ({
+    steps: [{ kind: 'shell', verify: "Test-Path 'x'", status }],
+    understanding: { deliverables: [deliverable] },
+  });
+  assert.equal(provenByCommands(op('file3.txt copied to file3_backup.txt')), true);
+  assert.equal(provenByCommands(op('The file file2.txt is renamed to file2_renamed.txt')), true);
+  assert.equal(provenByCommands(op('file5.txt deleted from the folder')), true);
+  // A step whose check did not pass is not proven — the judge is not skipped.
+  assert.equal(provenByCommands(op('file3.txt copied to file3_backup.txt', 'failed')), false);
+  // Authored content always faces the judge, however it was produced.
+  assert.equal(provenByCommands(op('A report on flight prices in report.html')), false);
+  // A research step is not a shell command, so it is never waved through.
+  assert.equal(
+    provenByCommands({ steps: [{ kind: 'research', verify: null, status: 'ok' }], understanding: { deliverables: ['file copied'] } }),
+    false,
+  );
 });
 
 test('a real document passes the cheap checks', () => {

@@ -157,8 +157,41 @@ export function categorize(mission = {}) {
 // empty file, an empty file stops being evidence of a job half done.
 const WANTS_EMPTY = /\b(empty|blank|zero[\s-]?byte|0[\s-]?byte)\b/i;
 
+// Renaming, copying, moving or backing up a file inherits its content — it does
+// not author any. So a copy of an empty file is an empty file and the job is
+// done, even though nobody asked for "empty": the source was empty, and the
+// operation faithfully carried that across. The empty check exists to catch a
+// report that rendered blank, not a faithful copy of a blank file.
+const INHERITS_CONTENT = /\b(renam|copie|copy|moved?|moving|back(?:ing)?[\s-]?up|backup|duplicat)\w*/i;
+
+// Operations that leave nothing behind in the workspace: a delete removes the
+// file, a move carries it elsewhere. Either way an empty artifact list is the
+// correct outcome, not evidence that nothing happened — so the "no file was
+// produced" complaint must not fire on them.
+const LEAVES_NOTHING = /\b(delet|remov|eras|purg|moved?|moving)\w*/i;
+
+// A pure file operation — copy, rename, move, delete — proven by its own
+// command check needs no second opinion. The model judge earns its keep on
+// authored content: is this the right subject, is it a placeholder, does the
+// count fall short. Turned loose on a faithful copy of an empty file it does
+// harm — it called file3_backup.txt "not an exact copy of file3.txt" because
+// the evidence it was shown could not tell it the source was empty too. When
+// every step is a shell command that passed its own verify, and every
+// deliverable describes carrying content across or removing it rather than
+// writing any, the commands have already said so.
+export function provenByCommands(mission = {}) {
+  const steps = Array.isArray(mission.steps) ? mission.steps : [];
+  if (!steps.length) return false;
+  const allVerifiedShell = steps.every((s) => s && s.kind === 'shell' && s.verify && s.status === 'ok');
+  const deliverables = mission.understanding?.deliverables || [];
+  const allOperations =
+    deliverables.length > 0 && deliverables.every((d) => INHERITS_CONTENT.test(d) || LEAVES_NOTHING.test(d));
+  return allVerifiedShell && allOperations;
+}
+
 export function obviousShortfall(artifacts, deliverables = [], { category = null, steps = [] } = {}) {
-  const emptyIsWhatWasAsked = deliverables.some((d) => WANTS_EMPTY.test(d));
+  const emptyIsWhatWasAsked =
+    deliverables.some((d) => WANTS_EMPTY.test(d)) || deliverables.some((d) => INHERITS_CONTENT.test(d));
   if (!artifacts.length) {
     // An operation mission owes commands, not files. Every step already ran
     // and was verified by its exit code, so "restart the browser" ending with
@@ -171,6 +204,11 @@ export function obviousShortfall(artifacts, deliverables = [], { category = null
       const proven = steps.some((s) => s.verify && s.status === 'ok');
       return steps.length && !proven ? 'the browser was driven, but the state it reached was never verified' : null;
     }
+    // A delete or a move-away owes no file in the workspace — the file was
+    // removed, or carried elsewhere. "delete file5.txt" and "move file4.txt to
+    // Documents" name a file, so the check below would demand one back and fail
+    // a job that did exactly what was asked. The verb settles it.
+    if (deliverables.some((d) => LEAVES_NOTHING.test(d))) return null;
     // Only a failure when a file was actually owed. Judged against the
     // deliverables, not the step count: "run the tests" and "restart the
     // browser" produce no file, and were being reported failed for it.

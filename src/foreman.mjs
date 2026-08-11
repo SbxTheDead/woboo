@@ -235,7 +235,16 @@ export async function runMission(task, { workspace } = {}) {
       });
       let verdicts = [];
 
-      if (!shortfall && mission.understanding && brain.hasCredentials()) {
+      // A pure file operation proven by its own command verify does not go to
+      // the model judge — the command already said so, and the judge, shown a
+      // faithful copy of an empty file, will call it "not an exact copy". The
+      // judge stays for authored content, where being shown the wrong subject
+      // is exactly the failure it exists to catch.
+      const provenByCommand = acceptance.provenByCommands(mission);
+      if (provenByCommand) {
+        record('accept', 'a file operation proven by its command check — no second opinion needed', { level: 'ok' });
+      }
+      if (!shortfall && !provenByCommand && mission.understanding && brain.hasCredentials()) {
         setFace('testing', 'checking it is what you asked for');
         try {
           const result = await acceptance.check({
@@ -428,9 +437,17 @@ export function filesTouched(command, cwd, since = 0) {
       seen.add(candidate);
       try {
         const stat = fs.statSync(candidate);
-        // A tolerance, because a filesystem's idea of "now" is coarser than
-        // ours and a file written in the same second must still count.
-        if (stat.isFile() && stat.mtimeMs >= since - 2000) found.push(candidate);
+        // The newest of the three, because no single one survives every way a
+        // step can produce a file. Windows preserves a file's LastWriteTime
+        // through a rename and a copy, so a renamed file keeps the mtime it was
+        // born with — 22:46, long before a step that renames it at 22:48 — and
+        // the mtime gate threw it away as "not mine". The change-time does move
+        // on a rename, and a copy gets a fresh birth-time; a command that only
+        // *reads* a file moves none of them, so the gate still refuses to claim
+        // what was merely read. The tolerance covers a filesystem whose idea of
+        // "now" is coarser than ours.
+        const touched = Math.max(stat.mtimeMs, stat.ctimeMs, stat.birthtimeMs || 0);
+        if (stat.isFile() && touched >= since - 2000) found.push(candidate);
       } catch {
         // Named but not on disk: a file that was deleted, or one the plan
         // guessed at and nothing ever wrote. Neither is an artifact.

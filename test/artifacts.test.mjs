@@ -57,6 +57,21 @@ test('a file the step did not write is not claimed as its own', () => {
   assert.deepEqual(filesTouched('Get-Content resume.txt', dir, inTheFuture), []);
 });
 
+test('a renamed file is claimed even though Windows keeps its old write-time', () => {
+  // The real failure: file2.txt was created at 22:46 by an earlier task, then
+  // renamed at 22:48 by this one. Rename preserves LastWriteTime, so the new
+  // file's mtime is 22:46 — before this step began — and the mtime gate threw
+  // it away. The change-time moved to 22:48, which is how it is caught.
+  const born = make('old-source.txt', 'x');
+  const longAgo = new Date(Date.now() - 60 * 60 * 1000); // an hour before
+  fs.utimesSync(born, longAgo, longAgo);
+  fs.renameSync(born, path.join(dir, 'old-source-renamed.txt'));
+
+  const stepStarted = Date.now() - 5000;
+  const found = filesTouched("Rename-Item 'old-source.txt' -NewName 'old-source-renamed.txt'", dir, stepStarted);
+  assert.deepEqual(names(found), ['old-source-renamed.txt']);
+});
+
 test('a file that was named but never created is not an artifact', () => {
   assert.deepEqual(filesTouched("New-Item -Path 'nothing-wrote-this.pdf'", dir, 0), []);
 });
