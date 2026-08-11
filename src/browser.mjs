@@ -16,6 +16,7 @@
 // had a WebSocket client built in since v22, so it costs no dependency at all.
 
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { PATHS, loadSettings, resolveProxy } from './config.mjs';
@@ -93,13 +94,12 @@ export function profileDir() {
   return path.join(PATHS.home, 'browser');
 }
 
-// Where Chrome saves downloads. Created on first use.
-// A real path is required — Browser.setDownloadBehavior rejects empty strings,
-// and without a valid path Chrome reports "something went wrong" on every download.
+// Where Chrome saves downloads. Uses the OS temp directory because the planner
+// generates install commands like & "$env:TEMP\installer.exe" — if downloads go
+// somewhere else, the install step cannot find the file. The OS temp dir is where
+// both the planner and the user expect transient files to land.
 export function downloadDir() {
-  const dir = path.join(PATHS.home, 'downloads');
-  try { fs.mkdirSync(dir, { recursive: true }); } catch { /* already exists */ }
-  return dir;
+  return os.tmpdir();
 }
 
 function profileArgs() {
@@ -414,6 +414,23 @@ function frameOf(index) {
 // blank because the navigation failed".
 export function isDownloading() {
   return activeDownloads > 0;
+}
+
+// Wait for all active downloads to finish before returning.
+// The mission loop moves to the next step as soon as the web step returns,
+// so without this the install step runs before the file is fully on disk —
+// the installer exits immediately with "file not found" because the download
+// is still in progress.
+export async function waitForDownloads(timeoutMs = 60_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (activeDownloads > 0 && Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  if (activeDownloads > 0) {
+    record('browser', `download did not finish within ${timeoutMs / 1000}s — proceeding anyway`, { level: 'warn' });
+  } else if (lastDownloadName) {
+    record('browser', `download finished: ${lastDownloadName} (saved to ${downloadDir()})`, { level: 'ok' });
+  }
 }
 
 export function lastDownloadFilename() {

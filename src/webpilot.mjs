@@ -264,6 +264,8 @@ export async function browse({ goal, url = null, maxSteps = 14, ask, onProgress 
         say(`download in progress: ${name} — the page is blank because the file is saving, not because navigation failed`, 'ok');
         recent.length = 0;
         history.push(`${step}. goto triggered download: ${name} (page is blank because the file is saving)`);
+        // Wait for the download to finish so the file is on disk before the next step.
+        await browser.waitForDownloads();
         continue;
       }
       setFace('confused', 'stuck in a loop');
@@ -328,6 +330,9 @@ export async function browse({ goal, url = null, maxSteps = 14, ask, onProgress 
             const name = browser.lastDownloadFilename() || 'file';
             say(`download started: ${name}`, 'ok');
             history.push(`${step}. goto ${target.slice(0, 60)} — download started: ${name}`);
+            // Wait for the download to fully complete before moving on.
+            // Without this, the next step (e.g. install) runs before the file is on disk.
+            await browser.waitForDownloads();
             continue;
           }
         } else if (target) {
