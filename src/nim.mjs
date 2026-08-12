@@ -258,7 +258,11 @@ export async function write({ system, prompt, maxTokens = 16_000 }) {
           method: 'POST',
           headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
           body,
-          signal: AbortSignal.timeout(120_000),
+          // Writing a cited summary from several sources is a long generation on
+          // a 120B model — 120s was cutting off documents mid-render and turning
+          // a slow-but-working write into three "aborted due to timeout"s and a
+          // failed research mission. Five minutes lets the document finish.
+          signal: AbortSignal.timeout(300_000),
         });
       } catch (err) {
         lastError = err;
