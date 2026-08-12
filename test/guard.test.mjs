@@ -59,6 +59,15 @@ const CASES = [
   ["[System.Reflection.Assembly]::LoadFile('x.dll')", 'deny'],
   ["[scriptblock]::Create($code).Invoke()", 'deny'],
   ["[Convert]::FromBase64String($payload)", 'deny'],
+  // PowerShell's Format-* cmdlets shape console output — they are not "format
+  // the disk". A bare \bformat\b refused them because the hyphen is a boundary.
+  ['Get-ComputerInfo | Format-List', 'ask'],
+  ['Get-ChildItem | Format-Table Name,Length', 'ask'],
+  ['dir | Format-Wide', 'ask'],
+  // The real thing still denies.
+  ['format C:', 'deny'],
+  ['format D: /q', 'deny'],
+  ['diskpart', 'deny'],
 
   // Writing into the state directory is the agent editing its own allowlist,
   // owner key and STOP latch. The owner may legitimately want that, so it

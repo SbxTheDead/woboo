@@ -130,7 +130,11 @@ const FORBIDDEN = [
   [/\brm\s+-{1,2}[a-z]*[rf]/i, 'recursive delete'],
   [/\bRemove-Item\b[^\n]*-Recurse/i, 'recursive delete'],
   [/\bdel\s+\/[sq]/i, 'recursive delete'],
-  [/\b(format|mkfs|diskpart)\b/i, 'disk formatting'],
+  // `format` the disk — but NOT PowerShell's Format-List / Format-Table /
+  // Format-Wide, which only shape console output. The hyphen is a word boundary,
+  // so a bare \bformat\b matched "Format" in "Format-List" and refused
+  // "Get-ComputerInfo | Format-List" as if it were formatting C:.
+  [/\b(?:format(?!-)|mkfs|diskpart)\b/i, 'disk formatting'],
   [/\b(shutdown|Restart-Computer|Stop-Computer|reboot)\b/i, 'power control'],
   [/\bgit\s+push\b[^\n]*--force/i, 'force push'],
   [/\bgit\s+reset\b[^\n]*--hard/i, 'hard reset'],
