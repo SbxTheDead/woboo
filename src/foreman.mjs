@@ -714,14 +714,45 @@ async function executeStep(i, { cwd, member, task }) {
       // Create a file with exact content, without a shell in the middle. The
       // planner kept trying to write a JSON array or a CSV through
       // `powershell -Command @'...'@ | Set-Content`, and the here-string, the
-      // quotes and the escaping broke it every time. A write step carries the
-      // body as data, so Woboo puts it on disk verbatim — nothing to escape.
+      // quotes and the escaping broke it every time.
       const named = String(instruction).match(/([^\s'"<>|]+\.[A-Za-z0-9]{1,8})/)?.[1] || String(instruction).trim();
       const target = path.resolve(cwd, named.replace(/^['"]|['"]$/g, ''));
-      const body = typeof step.content === 'string' ? step.content : '';
+      const spec = typeof step.content === 'string' ? step.content : '';
+
+      // The body is generated as PLAIN TEXT, not carried in the plan's JSON.
+      // The nemotron model strips the newlines out of a multi-line string value
+      // when it fills a structured field, so a CSV came back as one run-on line
+      // and a JSON array arrived truncated to "[  {". A plain-text write call has
+      // no JSON string to escape, so every newline survives.
+      let body = spec;
+      // A structured file with no newline in its body is mangled: nemotron
+      // stripped the newlines (a run-on CSV) or truncated the JSON to "[  {".
+      // Real JSON/CSV/HTML/code always spans lines, so regenerate it as plain
+      // text. A file whose body already contains a newline came through intact.
+      const structured = /\.(json|jsonl|csv|tsv|html?|xml|ya?ml|md|js|mjs|cjs|ts|jsx|tsx|py|css|scss|sql|sh|ps1|bat|ini|toml|env)$/i.test(target);
+      const looksMangled = !body.trim() || (structured && !body.includes('\n'));
+      if (looksMangled && brain.hasCredentials()) {
+        try {
+          body = await brain.write({
+            system:
+              'You output the exact, complete contents of a single file and nothing else: no explanation, no ' +
+              'commentary, no markdown code fences. Preserve every newline and all indentation.',
+            prompt:
+              `Produce the complete contents of the file ${path.basename(target)}.\n\n` +
+              `What the file must contain:\n${spec || step.title}\n\n` +
+              `Task context: ${task}\n\nOutput only the file body, ready to save verbatim.`,
+          });
+        } catch (err) {
+          record('write', `could not generate content (${err.message}); using the plan's content`, { level: 'warn' });
+          body = spec;
+        }
+      }
+      // Some models still wrap output in a ```lang fence despite being told not to.
+      body = String(body || '').replace(/^\s*```[\w-]*\r?\n/, '').replace(/\r?\n```\s*$/, '');
+
       try {
-        if (!body) {
-          work = { ok: false, out: `write step for ${path.basename(target)} had no content to write` };
+        if (!body.trim()) {
+          work = { ok: false, out: `write step for ${path.basename(target)} produced no content` };
         } else {
           fs.mkdirSync(path.dirname(target), { recursive: true });
           fs.writeFileSync(target, body, 'utf8');
