@@ -351,6 +351,13 @@ const SETS_OWN_EXIT =
 // fixed here rather than asked for politely in a prompt.
 export function unescapePaths(command) {
   return String(command || '')
+    // `cmd1 && cmd2` is bash; Windows PowerShell 5.1 has no && operator and
+    // dies with a parser error ("token '&&' is not a valid statement
+    // separator"), so `cd D:/wobo && npm install` never ran. Use the statement
+    // separator PowerShell actually has. Quoted strings are left alone, so a
+    // literal && inside an argument survives. (5.1 loses &&'s short-circuit, but
+    // the guard still classifies each statement on its own.)
+    .replace(/'[^']*'|"[^"]*"|&&/g, (m) => (m === '&&' ? ';' : m))
     // Windows PowerShell's Join-Path takes exactly two path parts — a third is a
     // parse error ("A positional parameter cannot be found that accepts argument
     // 'hello-world.html'"). The planner writes the natural three-part form for a

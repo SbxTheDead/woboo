@@ -76,6 +76,13 @@ test('a dropped backslash after a drive letter is restored', () => {
   assert.equal(unescapePaths('Get-Item HKLM:\\SOFTWARE'), 'Get-Item HKLM:\\SOFTWARE');
 });
 
+test('bash && becomes the PowerShell statement separator', () => {
+  // PowerShell 5.1 has no && operator; "cd X && npm install" is a parser error.
+  assert.equal(unescapePaths('cd D:/wobo && npm install express'), 'cd D:/wobo ; npm install express');
+  // && inside a quoted argument is data, not an operator — leave it.
+  assert.equal(unescapePaths("Write-Output 'a && b'"), "Write-Output 'a && b'");
+});
+
 test('a three-part Join-Path is nested into two-part calls for PowerShell 5.1', () => {
   // Windows PowerShell's Join-Path takes exactly two parts; a third is a parse
   // error. "create an HTML file on my desktop" became Join-Path $env:USERPROFILE
