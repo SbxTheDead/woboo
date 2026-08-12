@@ -348,6 +348,15 @@ const SETS_OWN_EXIT =
 // fixed here rather than asked for politely in a prompt.
 export function unescapePaths(command) {
   return String(command || '')
+    // Windows PowerShell's Join-Path takes exactly two path parts — a third is a
+    // parse error ("A positional parameter cannot be found that accepts argument
+    // 'hello-world.html'"). The planner writes the natural three-part form for a
+    // nested path; nest it into two-part calls so it runs. Only -AdditionalChildPath
+    // in PowerShell 7 accepts more, and this machine runs 5.1.
+    .replace(
+      /\bJoin-Path\s+(\$env:\w+|'[^']*'|"[^"]*"|[^\s'"()]+)\s+('[^']*'|"[^"]*"|[^\s'"()]+)\s+('[^']*'|"[^"]*"|[^\s'"()]+)/gi,
+      'Join-Path (Join-Path $1 $2) $3',
+    )
     // A drive letter with no separator after it — D:wobo\file.txt — is a
     // dropped backslash, not a drive-relative path. The model meant
     // D:\wobo\file.txt; PowerShell reads D:wobo as "wobo, relative to drive D's

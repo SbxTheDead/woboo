@@ -76,6 +76,18 @@ test('a dropped backslash after a drive letter is restored', () => {
   assert.equal(unescapePaths('Get-Item HKLM:\\SOFTWARE'), 'Get-Item HKLM:\\SOFTWARE');
 });
 
+test('a three-part Join-Path is nested into two-part calls for PowerShell 5.1', () => {
+  // Windows PowerShell's Join-Path takes exactly two parts; a third is a parse
+  // error. "create an HTML file on my desktop" became Join-Path $env:USERPROFILE
+  // 'Desktop' 'x.html' and failed three times.
+  assert.equal(
+    unescapePaths("Set-Content (Join-Path $env:USERPROFILE 'Desktop' 'x.html') -Value y"),
+    "Set-Content (Join-Path (Join-Path $env:USERPROFILE 'Desktop') 'x.html') -Value y",
+  );
+  // A well-formed two-part call is left exactly as it is.
+  assert.equal(unescapePaths("Join-Path $env:TEMP 'file.txt'"), "Join-Path $env:TEMP 'file.txt'");
+});
+
 test('a check that only reads $LASTEXITCODE or $? cannot prove anything here', () => {
   // Each command runs in its own PowerShell, so the step command's exit code
   // is gone by the time the verify runs — the command's own result is the proof.
