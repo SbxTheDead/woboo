@@ -77,6 +77,18 @@ Be strict, and be specific about why:
 If a deliverable IS met, say what makes you sure — the file, and what is in it.
 Do not be generous. The owner is about to be told this job is finished.`;
 
+// Read a text file the way its bytes actually are, not the way we hope. A
+// PowerShell `... > file.txt` redirect writes UTF-16LE with a byte-order mark,
+// and reading that as UTF-8 turns "Windows 10 Pro" into a wall of nulls and
+// replacement characters — so a perfectly good system-info report was judged
+// unreadable. Honour the BOM; fall back to UTF-8.
+export function readDecoded(file) {
+  const buf = fs.readFileSync(file);
+  if (buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xfe) return buf.toString('utf16le').replace(/^﻿/, '');
+  if (buf.length >= 2 && buf[0] === 0xfe && buf[1] === 0xff) return buf.swap16().toString('utf16le').replace(/^﻿/, '');
+  return buf.toString('utf8').replace(/^﻿/, '');
+}
+
 // Facts about a file, cheap enough to gather for all of them.
 export function evidenceFor(file) {
   try {
@@ -94,8 +106,7 @@ export function evidenceFor(file) {
     }
 
     if (/\.(html?|txt|md|json|csv)$/i.test(file)) {
-      const text = fs
-        .readFileSync(file, 'utf8')
+      const text = readDecoded(file)
         .replace(/<[^>]+>/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
@@ -252,7 +263,7 @@ export function obviousShortfall(artifacts, deliverables = [], { category = null
 
     let text = '';
     try {
-      if (/\.(html?|txt|md)$/i.test(file)) text = fs.readFileSync(file, 'utf8');
+      if (/\.(html?|txt|md)$/i.test(file)) text = readDecoded(file);
     } catch {
       return `${path.basename(file)} could not be read back`;
     }

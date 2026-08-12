@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { evidenceFor, obviousShortfall, check, categorize, provenByCommands } from '../src/acceptance.mjs';
+import { evidenceFor, obviousShortfall, check, categorize, provenByCommands, readDecoded } from '../src/acceptance.mjs';
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'woboo-accept-'));
 const file = (name, body) => {
@@ -40,6 +40,17 @@ test('producing no file is fine when no file was asked for', () => {
   assert.equal(obviousShortfall([], ['The test suite passing']), null);
   assert.equal(obviousShortfall([], ['The browser restarted with the profile loaded']), null);
   assert.equal(obviousShortfall([], ['An answer to the question, in chat']), null);
+});
+
+test('a UTF-16 file (PowerShell > redirect) reads back as its real text', () => {
+  // `Get-ComputerInfo | Format-List > info.txt` writes UTF-16LE with a BOM;
+  // read as UTF-8 it is a wall of nulls and a correct report is judged garbage.
+  const le = path.join(dir, 'info-le.txt');
+  fs.writeFileSync(le, Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from('Windows 10 Pro', 'utf16le')]));
+  assert.equal(readDecoded(le), 'Windows 10 Pro');
+  // A plain UTF-8 file still reads normally, BOM or not.
+  assert.equal(readDecoded(file('u8.txt', 'hello world')), 'hello world');
+  assert.match(evidenceFor(le), /Windows 10 Pro/);
 });
 
 test('a browser read is its own proof — no shell verify required', () => {
