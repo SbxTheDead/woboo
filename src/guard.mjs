@@ -111,6 +111,20 @@ const KEYWORDS = new Set([
   'break', 'continue', 'param', 'function', 'not', 'in', 'then', 'fi', 'esac',
 ]);
 
+// Type accelerators whose static methods compute a value and touch nothing —
+// arithmetic, text, dates, parsing. `[math]::Round`, `[string]::Format`,
+// `[datetime]::Now`, `[int]::Parse` are how a planner formats a byte count or a
+// timestamp, and refusing them stops ordinary work while blocking nothing real.
+// Deliberately absent: anything that does IO, launches a process, loads an
+// assembly, or compiles code — [io.*], [diagnostics.process], [reflection.*],
+// [scriptblock], [activator], [convert] (base64 for payloads), [text.encoding].
+const SAFE_STATIC_TYPES = new Set([
+  'math', 'string', 'char', 'bool', 'boolean',
+  'int', 'int16', 'int32', 'int64', 'uint16', 'uint32', 'uint64',
+  'long', 'short', 'byte', 'sbyte', 'double', 'single', 'float', 'decimal',
+  'datetime', 'datetimeoffset', 'timespan', 'guid', 'version', 'regex', 'math.pi',
+]);
+
 // Patterns that are never worth asking about. Ordered roughly by how bad.
 const FORBIDDEN = [
   [/\brm\s+-{1,2}[a-z]*[rf]/i, 'recursive delete'],
@@ -233,7 +247,26 @@ export function classifyCommand(raw) {
     // [Diagnostics.Process], lowercase — because only the shape is tested.
     // Casts and indexing without the `::` — [char]65, [int]$x, $x[0] — run
     // nothing and fall through.
-    if (/^\[[\w.]+\]\s*::/.test(segment) || /^\$[\w.]+\s*::/.test(segment)) {
+    const staticCall = segment.match(/^\[([\w.]+)\]\s*::/);
+    if (staticCall) {
+      // Not every static call is a bypass. `[math]::Round($n, 2)` and
+      // `[string]::Format(...)` are pure arithmetic and text — a byte count
+      // rendered human-readable, a number formatted — and the planner reaches
+      // for them constantly. What the deny is actually aimed at is the type
+      // that touches the machine: [System.IO.File], [Diagnostics.Process],
+      // [Reflection.Assembly], [scriptblock]::Create — IO, process launch,
+      // assembly loading, code compilation. So a small safelist of inert value
+      // types passes and everything else, including any spelling of a dangerous
+      // namespace, still denies.
+      const type = staticCall[1].toLowerCase().replace(/^system\./, '');
+      if (!SAFE_STATIC_TYPES.has(type)) {
+        return { verdict: 'deny', reason: 'refused (type-static method invocation)' };
+      }
+      continue;
+    }
+    // A variable holding a type ($t::Start) is the same invocation wearing a
+    // name, and there is no type to safelist — deny.
+    if (/^\$[\w.]+\s*::/.test(segment)) {
       return { verdict: 'deny', reason: 'refused (type-static method invocation)' };
     }
     // Variables, switches, quoted literals, numbers, casts, array indexing.

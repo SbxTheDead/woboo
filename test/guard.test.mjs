@@ -47,6 +47,18 @@ const CASES = [
   ['[char]65', 'allow'],
   ['[int]$x', 'allow'],
   ['$x[0]', 'allow'],
+  // Inert value types compute and touch nothing — a byte count made readable,
+  // a number formatted, the clock read. These are allowed; the dangerous
+  // namespaces above still deny.
+  ['[math]::Round(1234.5678, 2)', 'allow'],
+  ['[Math]::Round($bytes / 1MB, 2)', 'allow'],
+  ['[System.Math]::Floor(3.9)', 'allow'],
+  ["[string]::Join(',', $names)", 'allow'],
+  ['[datetime]::Now', 'allow'],
+  // Still denied: assembly loading, code compilation, base64 payload decoding.
+  ["[System.Reflection.Assembly]::LoadFile('x.dll')", 'deny'],
+  ["[scriptblock]::Create($code).Invoke()", 'deny'],
+  ["[Convert]::FromBase64String($payload)", 'deny'],
 
   // Writing into the state directory is the agent editing its own allowlist,
   // owner key and STOP latch. The owner may legitimately want that, so it

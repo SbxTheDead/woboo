@@ -241,10 +241,24 @@ export async function runMission(task, { workspace } = {}) {
       // judge stays for authored content, where being shown the wrong subject
       // is exactly the failure it exists to catch.
       const provenByCommand = acceptance.provenByCommands(mission);
-      if (provenByCommand) {
-        record('accept', 'a file operation proven by its command check — no second opinion needed', { level: 'ok' });
+      // An operation mission — list, count, show, run the tests — owes verified
+      // commands and no file. Its steps have each passed their own check; the
+      // model judge only ever sees files and step outputs, so with no file to
+      // look at it invents a delivery nobody asked for — "the owner did not
+      // receive a file" for "tell me how many files are on the desktop". The
+      // commands already answered the question.
+      const operationProven = mission.category === 'operation' && !shortfall;
+      const skipJudge = provenByCommand || operationProven;
+      if (skipJudge) {
+        record(
+          'accept',
+          provenByCommand
+            ? 'a file operation proven by its command check — no second opinion needed'
+            : 'an operation proven by its command checks — no second opinion needed',
+          { level: 'ok' },
+        );
       }
-      if (!shortfall && !provenByCommand && mission.understanding && brain.hasCredentials()) {
+      if (!shortfall && !skipJudge && mission.understanding && brain.hasCredentials()) {
         setFace('testing', 'checking it is what you asked for');
         try {
           const result = await acceptance.check({
@@ -326,6 +340,15 @@ const SETS_OWN_EXIT =
 // fixed here rather than asked for politely in a prompt.
 export function unescapePaths(command) {
   return String(command || '')
+    // A drive letter with no separator after it — D:wobo\file.txt — is a
+    // dropped backslash, not a drive-relative path. The model meant
+    // D:\wobo\file.txt; PowerShell reads D:wobo as "wobo, relative to drive D's
+    // current directory", so from D:\wobo it resolves to D:\wobo\wobo\file.txt
+    // and the write lands nowhere. Restore the separator. The lookbehind spares
+    // multi-letter PowerShell drives (Env:, Variable:, HKLM:) — only a single
+    // letter standing on its own is a filesystem drive — and the lookahead
+    // spares a drive already followed by a separator (C:\Users).
+    .replace(/(?<![A-Za-z])([A-Za-z]:)(?=[A-Za-z0-9_.\-])/g, '$1\\')
     // Fix doubled backslashes from JSON: 'D:\\\\woboo' -> 'D:\\woboo'
     .replace(/'([^']*)'/g, (whole, inner) =>
       /[A-Za-z]:\\\\|\\\\\w/.test(inner) ? `'${inner.replace(/\\{2,}/g, '\\')}'` : whole,
@@ -518,6 +541,48 @@ export function verifyIsMalformed(command) {
     if (depth > 0) return `${depth} unclosed ${name}${depth > 1 ? 's' : ''}`;
   }
   return null;
+}
+
+// A check that reads $LASTEXITCODE or $? proves nothing here.
+//
+// Every command and its verify run in separate PowerShell processes, so the
+// exit code of the step's command does not exist in the verify's world —
+// $LASTEXITCODE is $null, `$null -eq 0` is false, and the check fails a step
+// that actually succeeded. "show me PATH" ran `Write-Output $env:PATH` (exit 0)
+// and was then failed three times by `if ($LASTEXITCODE -eq 0)`. The command's
+// own exit code, which Woboo already holds, is the real answer — unless the
+// verify also inspects real state (a file, a value), in which case that part is
+// genuine and the whole check is run as written.
+// A content check that compares a whole file to a literal, byte for byte.
+//
+// `Set-Content -Encoding UTF8` writes a byte-order mark and a trailing CRLF, so
+// a file holding exactly "hello world" reads back as 13 characters, not 11, and
+// `$content -eq 'hello world'` is false. The write was perfect; the comparison
+// was too literal, and the step was failed three times over an invisible BOM.
+// Trimming both sides asks the question that was actually meant — does the file
+// say this — while still failing on genuinely wrong content.
+export function tolerateWhitespaceInComparison(command) {
+  const text = String(command || '');
+  // Only touch a raw whole-file comparison; a -match, -like or .Contains is
+  // already tolerant, and a comparison of a computed value is not ours to touch.
+  if (!/-Raw\b/i.test(text) || !/-eq\s*['"]/.test(text)) return text;
+  return (
+    text
+      // A variable holding the content: `$content -eq 'hello world'`.
+      .replace(/(\$\w+)\s+-eq\s+(['"])/g, '$1.Trim() -eq $2')
+      // The inline form, which the planner uses just as often:
+      // `(Get-Content -Path 'x' -Raw) -eq 'hello world'`. Trim the closing
+      // parenthesis of the -Raw read before the comparison.
+      .replace(/(\([^()]*-Raw\s*\))\s*-eq\s+(['"])/gi, '$1.Trim() -eq $2')
+  );
+}
+
+export function verifyReliesOnExitState(command) {
+  const text = String(command || '');
+  if (!/\$LASTEXITCODE\b|\$\?(?![\w])/.test(text)) return false;
+  return !/(Test-Path|Get-|Select-|Measure-|Compare-|Resolve-Path|\.Length|\.Count|-match|-contains|-eq\s+['"])/i.test(
+    text,
+  );
 }
 
 // Every result a step can produce funnels through the guard, so a code path
@@ -755,6 +820,23 @@ async function executeStep(i, { cwd, member, task }) {
       return ok();
     }
 
+    // A $LASTEXITCODE check cannot see the command's exit code from a separate
+    // shell, so the command's own result is the proof: exited 0 means done,
+    // non-zero means failed, and re-running the check would only fail it again.
+    if (verifyReliesOnExitState(step.verify)) {
+      record(
+        'step',
+        `step ${i + 1}: its check reads $LASTEXITCODE, which a fresh shell never has — trusting the command's own exit code`,
+        { level: 'warn' },
+      );
+      if (work.ok) {
+        setStep(i, { status: 'ok', ms: Date.now() - started, verifyOutput: 'check not run: relies on a prior exit code' });
+        return ok();
+      }
+      setStep(i, { status: 'failed', ms: Date.now() - started });
+      return fail(work.out || `step ${i + 1} command exited non-zero`);
+    }
+
     // Check the file that was made, not the one the plan guessed at.
     //
     // A research step names its document after the topic it researched. The
@@ -762,7 +844,7 @@ async function executeStep(i, { cwd, member, task }) {
     // step ran again — three complete research runs, twelve minutes, three
     // perfectly good PDFs rendered and thrown away, because the check was
     // looking at a path nothing had ever written.
-    let verifyCommand = unescapePaths(step.verify);
+    let verifyCommand = tolerateWhitespaceInComparison(unescapePaths(step.verify));
     if (work.file && fs.existsSync(work.file)) {
       verifyCommand = verifyCommand.replace(/'([^']*\.[a-z0-9]{2,5})'/gi, (whole, named) => {
         const guessed = path.resolve(cwd, named);

@@ -160,6 +160,19 @@ the owner. That road ends at a QR code Woboo cannot scan, and it was never
 necessary. The same goes for anything else Woboo has a credential for: use the
 credential, not the website.
 
+ONLY DELIVER WHEN DELIVERY WAS ASKED FOR.
+
+"Tell me", "show me", "what is", "list" want an answer, not a file sent to a
+phone. The owner is already looking at Woboo. Plan a deliver step only when the
+task actually says to send, message, or Telegram something — "send me the
+report", "message me when it is done".
+
+Asked to "show me the contents of my PATH", Woboo ran the command, then added a
+deliver step for path_output.txt, which no step had ever written, and failed a
+task whose work was already finished. Asked to "list all files on my desktop and
+tell me how many there are", it did the same. A deliver step whose file no
+earlier step creates is always a planning mistake; so is one nobody asked for.
+
 WOBOO READS DOCUMENTS ITSELF.
 
 Extracting text from a file is a "read" step. Its instruction is the path, and

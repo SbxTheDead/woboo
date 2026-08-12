@@ -64,6 +64,16 @@ test('a faithful copy or rename of an empty file is not a shortfall', () => {
   assert.match(obviousShortfall([file('r.md', '')], ['A report on the findings in r.md']) || '', /empty/i);
 });
 
+test('prose "file names" does not count as owing a file', () => {
+  // Task 8: "list all files on my desktop and tell me how many there are" — a
+  // console-output task. Its deliverables mention "file names" and "files", but
+  // nothing is owed on disk, and demanding one failed a correct job.
+  assert.equal(obviousShortfall([], ['A list of file names on the desktop', 'A count of the number of files']), null);
+  // But "a PDF", "the document", "an image" still owe their artifact.
+  assert.match(obviousShortfall([], ['A PDF of the summary']) || '', /no file/i);
+  assert.match(obviousShortfall([], ['The document with the findings']) || '', /no file/i);
+});
+
 test('a delete or move owes no file left behind', () => {
   // "delete file5.txt" and "move file4.txt to Documents" end with nothing in
   // the workspace, and that is the job done — not "no file was produced".

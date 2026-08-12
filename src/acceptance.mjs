@@ -112,8 +112,14 @@ export function evidenceFor(file) {
 // A deliverable that names a file, by extension ("summary.pdf") or by form
 // ("a PDF", "the document"). "The tests pass" and "the browser restarted"
 // name none — for those, producing no file is the correct outcome.
+// Either a name with an extension (summary.pdf), or a generic noun led by a
+// determiner (a PDF, the document, into an image). The determiner is what
+// separates "a file" — an owed artifact — from "a list of file names", where
+// "file" only modifies "names" and nothing is owed. Matching the bare word was
+// enough to categorize a console-listing task as coding and then fail it for
+// producing no file it never owed.
 const NAMES_A_FILE =
-  /[-\w]+\.(pdf|html?|txt|md|docx?|xlsx?|pptx?|csv|json|png|jpe?g|gif|zip)\b|\b(file|document|pdf|spreadsheet|presentation|screenshot|image|photo|picture)\b/i;
+  /[-\w]+\.(pdf|html?|txt|md|docx?|xlsx?|pptx?|csv|json|png|jpe?g|gif|zip)\b|\b(?:an?|the|one|each|new|another|its?|my|into an?|as an?)\s+(file|document|pdf|spreadsheet|presentation|screenshot|image|photo|picture)\b/i;
 
 // What "finished" has to look like depends on the kind of mission.
 //
