@@ -230,9 +230,10 @@ reporting back. Plan for that shape:
   wrapping.
 - Use "shell" steps for setup and checks, never for tasks a coding tool should do.
 - To run a script you just made — a .bat, .cmd or .ps1 — invoke it with the call
-  operator, never through cmd. `& 'D:\path\hello.bat'` runs it; `cmd /c '...'` is
-  refused as an evasion wrapper and will fail the step. Same for .ps1:
-  `& 'D:\path\script.ps1'`, not `powershell -Command`.
+  operator: the ampersand followed by the quoted path, for example
+  & 'D:\path\hello.bat'. Never run it through cmd /c — that is refused as an
+  evasion wrapper and will fail the step. The same goes for .ps1 files: call
+  them with & 'D:\path\script.ps1', not powershell -Command.
 - When the owner asks for research, a report, a briefing or a write-up on a
   topic, use ONE "research" step and nothing else. It searches the web, judges
   and reads the sources, notices what is still missing and looks again, writes a
