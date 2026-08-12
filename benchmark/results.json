@@ -1,6 +1,6 @@
 {
   "startedAt": 1786488339943,
-  "endedAt": 1786544919012,
+  "endedAt": 1786554137666,
   "tasks": [
     {
       "num": 1,
@@ -704,32 +704,30 @@
       "num": 25,
       "text": "create a batch file that echoes hello and run it",
       "category": "B. Environment Variables & Paths",
-      "passed": false,
-      "state": "failed",
-      "attempts": 2,
-      "ms": 35688,
-      "error": "refused (cmd wrapper): cmd /c 'D:\\wobo/hello.bat'",
-      "report": "refused (cmd wrapper): cmd /c 'D:\\wobo/hello.bat'",
-      "missionId": "c43d3f37de",
+      "passed": true,
+      "state": "done",
+      "attempts": 1,
+      "ms": 68312,
+      "error": null,
+      "report": "All 2 steps done, 2 proven by a command.",
+      "missionId": "6be72bd661",
       "steps": [
         {
-          "title": "Create the batch file",
+          "title": "Create hello.bat",
           "kind": "shell",
           "status": "ok",
           "verify": true
         },
         {
-          "title": "Run the batch file",
+          "title": "Run hello.bat",
           "kind": "shell",
-          "status": "running",
+          "status": "ok",
           "verify": true
         }
       ],
       "verdicts": [],
-      "evidence": "benchmark\\evidence\\task-025-attempt-2.json",
-      "finishedAt": "2026-08-12T10:13:49.502Z",
-      "rootCausePattern": "guard-conservative",
-      "rootCause": "Running a .bat needs a cmd /c wrapper, which the guard refuses. The brain could use the & call operator instead; NIM chose cmd."
+      "evidence": "benchmark\\evidence\\task-025-attempt-1.json",
+      "finishedAt": "2026-08-12T15:02:12.858Z"
     },
     {
       "num": 26,
@@ -1155,30 +1153,22 @@
       "category": "D. Browser Downloads",
       "passed": false,
       "state": "failed",
-      "attempts": 1,
-      "ms": 205827,
-      "error": "All 1 steps done. But you did not get what you asked for: The owner did not receive a test PDF file from w3.org saved in D:wobo.",
-      "report": "All 1 steps done. But you did not get what you asked for: The owner did not receive a test PDF file from w3.org saved in D:wobo.",
-      "missionId": "7df4a230c2",
+      "attempts": 2,
+      "ms": 349962,
+      "error": "Stopped at step 1: Download a test PDF from W3C test files",
+      "report": "Stopped at step 1: Download a test PDF from W3C test files",
+      "missionId": "b5962b4e83",
       "steps": [
         {
-          "title": "Download w3.org test PDF",
+          "title": "Download a test PDF from W3C test files",
           "kind": "web",
-          "status": "ok",
+          "status": "failed",
           "verify": false
         }
       ],
-      "verdicts": [
-        {
-          "deliverable": "a test PDF file from w3.org saved in D:wobo",
-          "met": false,
-          "evidence": "No files were produced in D:wobo; the download step reported the PDF file appears empty or contains no extractable text content, indicating no valid PDF was saved."
-        }
-      ],
-      "evidence": "benchmark\\evidence\\task-042-attempt-1.json",
-      "finishedAt": "2026-08-12T14:00:44.625Z",
-      "rootCausePattern": "inline-pdf-render",
-      "rootCause": "w3.org test PDF opens inline in Chrome viewer (0 download events), so nothing downloads to harvest. Would need to fetch the direct .pdf URL and save it."
+      "verdicts": [],
+      "evidence": "benchmark\\evidence\\task-042-attempt-2.json",
+      "finishedAt": "2026-08-12T15:14:50.684Z"
     },
     {
       "num": 43,
@@ -1375,58 +1365,1346 @@
       "verdicts": [],
       "evidence": "benchmark\\evidence\\task-050-attempt-1.json",
       "finishedAt": "2026-08-12T14:28:37.002Z"
+    },
+    {
+      "num": 51,
+      "text": "research the top 5 AI frameworks in 2025 and write a one-page summary",
+      "category": "E. Research & Compose",
+      "passed": false,
+      "state": "failed",
+      "attempts": 1,
+      "ms": 875626,
+      "error": "The operation was aborted due to timeout",
+      "report": "The operation was aborted due to timeout",
+      "missionId": "cb957c06be",
+      "steps": [
+        {
+          "title": "Research the top 5 AI frameworks in 2025 and generate a one-page PDF summary",
+          "kind": "research",
+          "status": "running",
+          "verify": false
+        }
+      ],
+      "verdicts": [],
+      "evidence": "benchmark\\evidence\\task-051-attempt-1.json",
+      "finishedAt": "2026-08-12T17:24:35.318Z"
+    },
+    {
+      "num": 52,
+      "text": "research how to set up a home server and write a guide",
+      "category": "E. Research & Compose",
+      "passed": true,
+      "state": "done",
+      "attempts": 1,
+      "ms": 940658,
+      "error": null,
+      "report": "All 2 steps done, 1 proven by a command. 1 deliverable(s) checked against what you asked for.",
+      "missionId": "d7452b7550",
+      "steps": [
+        {
+          "title": "Research home server setup guide using multiple trusted sources",
+          "kind": "research",
+          "status": "ok",
+          "verify": false
+        },
+        {
+          "title": "Deliver the home server guide PDF to the owner via Telegram",
+          "kind": "deliver",
+          "status": "ok",
+          "verify": true
+        }
+      ],
+      "verdicts": [
+        {
+          "deliverable": "A PDF guide on setting up a home server, containing researched information and written in a clear, organized format.",
+          "met": true,
+          "evidence": "File 'home-server-setup-guide-hardware-os-networking-sof.pdf' exists, is a PDF with 3 pages and 121KB, and was produced from research using multiple trusted sources covering hardware, OS, networking, software, security, and use cases, indicating researched and organized content."
+        }
+      ],
+      "evidence": "benchmark\\evidence\\task-052-attempt-1.json",
+      "finishedAt": "2026-08-12T16:52:17.976Z"
+    },
+    {
+      "num": 53,
+      "text": "find me 10 remote job boards for developers and list them",
+      "category": "E. Research & Compose",
+      "passed": false,
+      "state": "failed",
+      "attempts": 1,
+      "ms": 603769,
+      "error": "The operation was aborted due to timeout",
+      "report": "The operation was aborted due to timeout",
+      "missionId": "ada5aef2bd",
+      "steps": [
+        {
+          "title": "Search for remote developer job boards",
+          "kind": "web",
+          "status": "running",
+          "verify": false
+        },
+        {
+          "title": "Save the list to a file",
+          "kind": "shell",
+          "status": "pending",
+          "verify": true
+        }
+      ],
+      "verdicts": [],
+      "evidence": "benchmark\\evidence\\task-053-attempt-1.json",
+      "finishedAt": "2026-08-12T17:34:41.096Z"
+    },
+    {
+      "num": 54,
+      "text": "research the history of the JavaScript programming language",
+      "category": "E. Research & Compose",
+      "passed": false,
+      "state": "failed",
+      "attempts": 1,
+      "ms": 240700,
+      "error": "Couldn't reach the brain, so nothing was planned or done — The operation was aborted due to timeout. Your task is unchanged; try it again.",
+      "report": "Couldn't reach the brain, so nothing was planned or done — The operation was aborted due to timeout. Your task is unchanged; try it again.",
+      "missionId": "93c724b881",
+      "steps": [],
+      "verdicts": [],
+      "evidence": "benchmark\\evidence\\task-054-attempt-1.json",
+      "finishedAt": "2026-08-12T17:38:43.814Z"
+    },
+    {
+      "num": 55,
+      "text": "what are the differences between REST and GraphQL write a comparison",
+      "category": "E. Research & Compose",
+      "passed": false,
+      "state": "failed",
+      "attempts": 1,
+      "ms": 240611,
+      "error": "Couldn't reach the brain, so nothing was planned or done — The operation was aborted due to timeout. Your task is unchanged; try it again.",
+      "report": "Couldn't reach the brain, so nothing was planned or done — The operation was aborted due to timeout. Your task is unchanged; try it again.",
+      "missionId": "0aa897fbac",
+      "steps": [],
+      "verdicts": [],
+      "evidence": "benchmark\\evidence\\task-055-attempt-1.json",
+      "finishedAt": "2026-08-12T17:42:46.438Z"
+    },
+    {
+      "num": 56,
+      "text": "research the best practices for securing a Windows PC",
+      "category": "E. Research & Compose",
+      "passed": false,
+      "state": "failed",
+      "attempts": 1,
+      "ms": 240745,
+      "error": "Couldn't reach the brain, so nothing was planned or done — The operation was aborted due to timeout. Your task is unchanged; try it again.",
+      "report": "Couldn't reach the brain, so nothing was planned or done — The operation was aborted due to timeout. Your task is unchanged; try it again.",
+      "missionId": "8b75e22df1",
+      "steps": [],
+      "verdicts": [],
+      "evidence": "benchmark\\evidence\\task-056-attempt-1.json",
+      "finishedAt": "2026-08-12T17:46:49.198Z"
+    },
+    {
+      "num": 57,
+      "text": "find 5 free online courses about machine learning and list them with links",
+      "category": "E. Research & Compose",
+      "passed": false,
+      "state": "not-started",
+      "attempts": 1,
+      "ms": 0,
+      "error": "POST /api/mission answered 409: {\"error\":\"Woboo is already on a mission\"}",
+      "report": "",
+      "missionId": null,
+      "steps": [],
+      "verdicts": [],
+      "evidence": null,
+      "finishedAt": "2026-08-12T17:00:08.383Z"
+    },
+    {
+      "num": 58,
+      "text": "research how blockchain works and explain it simply",
+      "category": "E. Research & Compose",
+      "passed": false,
+      "state": "not-started",
+      "attempts": 1,
+      "ms": 0,
+      "error": "POST /api/mission answered 409: {\"error\":\"Woboo is already on a mission\"}",
+      "report": "",
+      "missionId": null,
+      "steps": [],
+      "verdicts": [],
+      "evidence": null,
+      "finishedAt": "2026-08-12T17:00:11.928Z"
+    },
+    {
+      "num": 59,
+      "text": "what are the pros and cons of working from home write a short report",
+      "category": "E. Research & Compose",
+      "passed": false,
+      "state": "not-started",
+      "attempts": 1,
+      "ms": 0,
+      "error": "POST /api/mission answered 409: {\"error\":\"Woboo is already on a mission\"}",
+      "report": "",
+      "missionId": null,
+      "steps": [],
+      "verdicts": [],
+      "evidence": null,
+      "finishedAt": "2026-08-12T17:00:15.465Z"
+    },
+    {
+      "num": 60,
+      "text": "research the latest version of Windows and its new features",
+      "category": "E. Research & Compose",
+      "passed": false,
+      "state": "not-started",
+      "attempts": 1,
+      "ms": 0,
+      "error": "POST /api/mission answered 409: {\"error\":\"Woboo is already on a mission\"}",
+      "report": "",
+      "missionId": null,
+      "steps": [],
+      "verdicts": [],
+      "evidence": null,
+      "finishedAt": "2026-08-12T17:00:19.008Z"
+    },
+    {
+      "num": 61,
+      "text": "find 3 recipes for chocolate cake and combine them into the best one",
+      "category": "E. Research & Compose",
+      "passed": false,
+      "state": "not-started",
+      "attempts": 1,
+      "ms": 0,
+      "error": "POST /api/mission answered 409: {\"error\":\"Woboo is already on a mission\"}",
+      "report": "",
+      "missionId": null,
+      "steps": [],
+      "verdicts": [],
+      "evidence": null,
+      "finishedAt": "2026-08-12T17:00:22.548Z"
+    },
+    {
+      "num": 62,
+      "text": "research electric cars available under 30000 dollars and compare them",
+      "category": "E. Research & Compose",
+      "passed": false,
+      "state": "not-started",
+      "attempts": 1,
+      "ms": 0,
+      "error": "POST /api/mission answered 409: {\"error\":\"Woboo is already on a mission\"}",
+      "report": "",
+      "missionId": null,
+      "steps": [],
+      "verdicts": [],
+      "evidence": null,
+      "finishedAt": "2026-08-12T17:00:26.088Z"
+    },
+    {
+      "num": 63,
+      "text": "what are the top 5 VS Code extensions for Python development",
+      "category": "E. Research & Compose",
+      "passed": false,
+      "state": "not-started",
+      "attempts": 1,
+      "ms": 0,
+      "error": "POST /api/mission answered 409: {\"error\":\"Woboo is already on a mission\"}",
+      "report": "",
+      "missionId": null,
+      "steps": [],
+      "verdicts": [],
+      "evidence": null,
+      "finishedAt": "2026-08-12T17:00:29.619Z"
+    },
+    {
+      "num": 64,
+      "text": "research how to start a YouTube channel and write a step by step guide",
+      "category": "E. Research & Compose",
+      "passed": false,
+      "state": "not-started",
+      "attempts": 1,
+      "ms": 0,
+      "error": "POST /api/mission answered 409: {\"error\":\"Woboo is already on a mission\"}",
+      "report": "",
+      "missionId": null,
+      "steps": [],
+      "verdicts": [],
+      "evidence": null,
+      "finishedAt": "2026-08-12T17:00:33.143Z"
+    },
+    {
+      "num": 65,
+      "text": "find the current weather in 5 major world cities",
+      "category": "E. Research & Compose",
+      "passed": false,
+      "state": "not-started",
+      "attempts": 1,
+      "ms": 0,
+      "error": "POST /api/mission answered 409: {\"error\":\"Woboo is already on a mission\"}",
+      "report": "",
+      "missionId": null,
+      "steps": [],
+      "verdicts": [],
+      "evidence": null,
+      "finishedAt": "2026-08-12T17:00:36.684Z"
+    },
+    {
+      "num": 66,
+      "text": "write a hello world HTML page and save it to my desktop",
+      "category": "F. File Creation & Documents",
+      "passed": true,
+      "state": "done",
+      "attempts": 2,
+      "ms": 34117,
+      "error": null,
+      "report": "All 1 steps done, 1 proven by a command.",
+      "missionId": "e93ec93470",
+      "steps": [
+        {
+          "title": "Create hello world HTML on desktop",
+          "kind": "shell",
+          "status": "ok",
+          "verify": true
+        }
+      ],
+      "verdicts": [],
+      "evidence": "benchmark\\evidence\\task-066-attempt-2.json",
+      "finishedAt": "2026-08-12T15:16:51.814Z"
+    },
+    {
+      "num": 67,
+      "text": "create a JSON file with a list of 5 countries and their capitals",
+      "category": "F. File Creation & Documents",
+      "passed": false,
+      "state": "not-started",
+      "attempts": 1,
+      "ms": 0,
+      "error": "POST /api/mission answered 409: {\"error\":\"Woboo is already on a mission\"}",
+      "report": "",
+      "missionId": null,
+      "steps": [],
+      "verdicts": [],
+      "evidence": null,
+      "finishedAt": "2026-08-12T17:00:40.220Z"
+    },
+    {
+      "num": 68,
+      "text": "write a Python script that prints hello world and save it",
+      "category": "F. File Creation & Documents",
+      "passed": true,
+      "state": "done",
+      "attempts": 1,
+      "ms": 117178,
+      "error": null,
+      "report": "All 1 steps done, 1 proven by a command.",
+      "missionId": "f59c4819ca",
+      "steps": [
+        {
+          "title": "Write the Python script to a file",
+          "kind": "shell",
+          "status": "ok",
+          "verify": true
+        }
+      ],
+      "verdicts": [],
+      "evidence": "benchmark\\evidence\\task-068-attempt-1.json",
+      "finishedAt": "2026-08-12T15:22:04.359Z"
+    },
+    {
+      "num": 69,
+      "text": "create a CSV file with columns name age city and 5 rows of sample data",
+      "category": "F. File Creation & Documents",
+      "passed": false,
+      "state": "not-started",
+      "attempts": 1,
+      "ms": 0,
+      "error": "POST /api/mission answered 409: {\"error\":\"Woboo is already on a mission\"}",
+      "report": "",
+      "missionId": null,
+      "steps": [],
+      "verdicts": [],
+      "evidence": null,
+      "finishedAt": "2026-08-12T17:00:43.747Z"
+    },
+    {
+      "num": 70,
+      "text": "write a markdown file with a table comparing 3 programming languages",
+      "category": "F. File Creation & Documents",
+      "passed": true,
+      "state": "done",
+      "attempts": 2,
+      "ms": 46444,
+      "error": null,
+      "report": "All 1 steps done, 1 proven by a command.",
+      "missionId": "a64d31b2c2",
+      "steps": [
+        {
+          "title": "Create markdown file with programming language comparison table",
+          "kind": "shell",
+          "status": "ok",
+          "verify": true
+        }
+      ],
+      "verdicts": [],
+      "evidence": "benchmark\\evidence\\task-070-attempt-2.json",
+      "finishedAt": "2026-08-12T15:27:26.669Z"
+    },
+    {
+      "num": 71,
+      "text": "create a simple CSS file with styles for a centered card layout",
+      "category": "F. File Creation & Documents",
+      "passed": true,
+      "state": "done",
+      "attempts": 2,
+      "ms": 32080,
+      "error": null,
+      "report": "All 1 steps done, 1 proven by a command.",
+      "missionId": "450204b413",
+      "steps": [
+        {
+          "title": "Create the CSS file with centered card layout styles",
+          "kind": "shell",
+          "status": "ok",
+          "verify": true
+        }
+      ],
+      "verdicts": [],
+      "evidence": "benchmark\\evidence\\task-071-attempt-2.json",
+      "finishedAt": "2026-08-12T15:29:30.698Z"
+    },
+    {
+      "num": 72,
+      "text": "write a batch script that lists all files in the current directory",
+      "category": "F. File Creation & Documents",
+      "passed": true,
+      "state": "done",
+      "attempts": 1,
+      "ms": 50744,
+      "error": null,
+      "report": "All 2 steps done, 2 proven by a command.",
+      "missionId": "322d1c2991",
+      "steps": [
+        {
+          "title": "Create the batch script file",
+          "kind": "shell",
+          "status": "ok",
+          "verify": true
+        },
+        {
+          "title": "Verify the script content",
+          "kind": "shell",
+          "status": "ok",
+          "verify": true
+        }
+      ],
+      "verdicts": [],
+      "evidence": "benchmark\\evidence\\task-072-attempt-1.json",
+      "finishedAt": "2026-08-12T15:30:23.462Z"
+    },
+    {
+      "num": 73,
+      "text": "create a .env file with sample API keys using fake values",
+      "category": "F. File Creation & Documents",
+      "passed": true,
+      "state": "done",
+      "attempts": 2,
+      "ms": 67813,
+      "error": null,
+      "report": "All 1 steps done, 1 proven by a command.",
+      "missionId": "0915d0ce4e",
+      "steps": [
+        {
+          "title": "Create .env file with sample API keys",
+          "kind": "shell",
+          "status": "ok",
+          "verify": true
+        }
+      ],
+      "verdicts": [],
+      "evidence": "benchmark\\evidence\\task-073-attempt-2.json",
+      "finishedAt": "2026-08-12T15:33:26.016Z"
+    },
+    {
+      "num": 74,
+      "text": "write a simple Express.js server in one file",
+      "category": "F. File Creation & Documents",
+      "passed": false,
+      "state": "not-started",
+      "attempts": 1,
+      "ms": 0,
+      "error": "POST /api/mission answered 409: {\"error\":\"Woboo is already on a mission\"}",
+      "report": "",
+      "missionId": null,
+      "steps": [],
+      "verdicts": [],
+      "evidence": null,
+      "finishedAt": "2026-08-12T17:00:47.287Z"
+    },
+    {
+      "num": 75,
+      "text": "create a README.md for a project called my-app with sections install usage license",
+      "category": "F. File Creation & Documents",
+      "passed": true,
+      "state": "done",
+      "attempts": 1,
+      "ms": 54934,
+      "error": null,
+      "report": "All 1 steps done, 1 proven by a command. 1 deliverable(s) checked against what you asked for.",
+      "missionId": "f11c74b3e1",
+      "steps": [
+        {
+          "title": "Create README.md with required sections",
+          "kind": "shell",
+          "status": "ok",
+          "verify": true
+        }
+      ],
+      "verdicts": [
+        {
+          "deliverable": "Create a README.md file for a project named my-app with sections for install, usage, and license.",
+          "met": true,
+          "evidence": "File D:/wobo/README.md exists and contains '# my-app`n`n## Install`n`n## Usage`n`n## License`n', which includes the required sections install, usage, and license with appropriate content for a project called my-app."
+        }
+      ],
+      "evidence": "benchmark\\evidence\\task-075-attempt-1.json",
+      "finishedAt": "2026-08-12T15:37:11.988Z"
+    },
+    {
+      "num": 76,
+      "text": "download an image from the web and save a report about it",
+      "category": "G. Multi-Step & Complex Tasks",
+      "passed": false,
+      "state": "failed",
+      "attempts": 2,
+      "ms": 74344,
+      "error": "Stopped at step 1: Download an example image from the web",
+      "report": "Stopped at step 1: Download an example image from the web",
+      "missionId": "3c6efbd99c",
+      "steps": [
+        {
+          "title": "Download an example image from the web",
+          "kind": "web",
+          "status": "failed",
+          "verify": false
+        },
+        {
+          "title": "Create an HTML file describing the image",
+          "kind": "shell",
+          "status": "pending",
+          "verify": true
+        },
+        {
+          "title": "Generate PDF report from HTML using Edge headless",
+          "kind": "shell",
+          "status": "pending",
+          "verify": true
+        }
+      ],
+      "verdicts": [],
+      "evidence": "benchmark\\evidence\\task-076-attempt-2.json",
+      "finishedAt": "2026-08-12T18:53:26.250Z"
+    },
+    {
+      "num": 77,
+      "text": "search for the top 5 GitHub repos about AI then create a markdown file listing them with descriptions",
+      "category": "G. Multi-Step & Complex Tasks",
+      "passed": false,
+      "state": "failed",
+      "attempts": 2,
+      "ms": 134559,
+      "error": "Stopped at step 1: Search GitHub for top AI repositories and save results",
+      "report": "Stopped at step 1: Search GitHub for top AI repositories and save results",
+      "missionId": "b78143eab6",
+      "steps": [
+        {
+          "title": "Search GitHub for top AI repositories and save results",
+          "kind": "web",
+          "status": "failed",
+          "verify": false
+        },
+        {
+          "title": "Create markdown file with the list of repositories",
+          "kind": "compose",
+          "status": "pending",
+          "verify": true
+        }
+      ],
+      "verdicts": [],
+      "evidence": "benchmark\\evidence\\task-077-attempt-2.json",
+      "finishedAt": "2026-08-12T18:58:40.841Z"
+    },
+    {
+      "num": 78,
+      "text": "check if node is installed if not download it then create a hello world express server and test it",
+      "category": "G. Multi-Step & Complex Tasks",
+      "passed": false,
+      "state": "failed",
+      "attempts": 2,
+      "ms": 99434,
+      "error": "Stopped at step 2: Create Express.js Hello World server",
+      "report": "Stopped at step 2: Create Express.js Hello World server",
+      "missionId": "7abd57613c",
+      "steps": [
+        {
+          "title": "Check if Node.js is installed",
+          "kind": "shell",
+          "status": "ok",
+          "verify": true
+        },
+        {
+          "title": "Create Express.js Hello World server",
+          "kind": "shell",
+          "status": "failed",
+          "verify": true
+        },
+        {
+          "title": "Start the Express.js server",
+          "kind": "shell",
+          "status": "pending",
+          "verify": true
+        },
+        {
+          "title": "Test the Express.js server responds with Hello World",
+          "kind": "shell",
+          "status": "pending",
+          "verify": true
+        }
+      ],
+      "verdicts": [],
+      "evidence": "benchmark\\evidence\\task-078-attempt-2.json",
+      "finishedAt": "2026-08-12T19:01:33.856Z"
+    },
+    {
+      "num": 79,
+      "text": "research 3 pizza recipes combine them into one HTML document and save it to my desktop",
+      "category": "G. Multi-Step & Complex Tasks",
+      "passed": false,
+      "state": "failed",
+      "attempts": 1,
+      "ms": 93761,
+      "error": "NIM returned something unparseable:\n{\"covers_brief\":false,\"missing\":[\"population figure for Asian elephants\"],\"unsupported\":[\"250g of flour\",\"1g of salt\",\"1g of instant yeast\",\"350g of water\",\"5-10 minutes\",\"450°F (230°C)\",\"10-12 minutes\",\"250g of flour\",\"1g of salt\",\"1g of instant yeast\",\"350g of water\",\"5-10 minutes\",\"450°F (230°C)\",\"10-12 minutes\",\"90% Soft wheat flour\",\"1% Potato starch\",\"3% Rye flour\",\"1 % Natural mother dough ",
+      "report": "NIM returned something unparseable:\n{\"covers_brief\":false,\"missing\":[\"population figure for Asian elephants\"],\"unsupported\":[\"250g of flour\",\"1g of salt\",\"1g of instant yeast\",\"350g of water\",\"5-10 minutes\",\"450°F (230°C)\",\"10-12 minutes\",\"250g of flour\",\"1g of salt\",\"1g of instant yeast\",\"350g of water\",\"5-10 minutes\",\"450°F (230°C)\",\"10-12 minutes\",\"90% Soft wheat flour\",\"1% Potato starch\",\"3% Rye flour\",\"1 % Natural mother dough ",
+      "missionId": "5e6cdf2776",
+      "steps": [
+        {
+          "title": "Find and read 3 pizza recipes",
+          "kind": "research",
+          "status": "running",
+          "verify": false
+        },
+        {
+          "title": "Save the combined recipes as an HTML document",
+          "kind": "compose",
+          "status": "pending",
+          "verify": true
+        }
+      ],
+      "verdicts": [],
+      "evidence": "benchmark\\evidence\\task-079-attempt-1.json",
+      "finishedAt": "2026-08-12T18:31:46.333Z"
+    },
+    {
+      "num": 80,
+      "text": "create a folder called project initialize a git repo create a README and make the first commit",
+      "category": "G. Multi-Step & Complex Tasks",
+      "passed": false,
+      "state": "failed",
+      "attempts": 1,
+      "ms": 5751,
+      "error": "Stopped at step 2: Initialize git repo",
+      "report": "Stopped at step 2: Initialize git repo",
+      "missionId": "a15fe397a7",
+      "steps": [
+        {
+          "title": "Create project folder",
+          "kind": "shell",
+          "status": "ok",
+          "verify": false
+        },
+        {
+          "title": "Initialize git repo",
+          "kind": "shell",
+          "status": "failed",
+          "verify": false
+        },
+        {
+          "title": "Create README file",
+          "kind": "compose",
+          "status": "pending",
+          "verify": true
+        },
+        {
+          "title": "First commit",
+          "kind": "shell",
+          "status": "pending",
+          "verify": true
+        }
+      ],
+      "verdicts": [],
+      "evidence": "benchmark\\evidence\\task-080-attempt-1.json",
+      "finishedAt": "2026-08-12T18:31:54.095Z"
+    },
+    {
+      "num": 81,
+      "text": "find my 5 most recent downloads list them with their sizes and move the oldest to a backup folder",
+      "category": "G. Multi-Step & Complex Tasks",
+      "passed": false,
+      "state": "failed",
+      "attempts": 1,
+      "ms": 4302,
+      "error": "Stopped at step 1: List 5 most recent downloads with sizes.",
+      "report": "Stopped at step 1: List 5 most recent downloads with sizes.",
+      "missionId": "851089da60",
+      "steps": [
+        {
+          "title": "List 5 most recent downloads with sizes.",
+          "kind": "shell",
+          "status": "failed",
+          "verify": true
+        },
+        {
+          "title": "Save list to disk.",
+          "kind": "read",
+          "status": "pending",
+          "verify": false
+        },
+        {
+          "title": "Sort downloads by date.",
+          "kind": "shell",
+          "status": "pending",
+          "verify": false
+        },
+        {
+          "title": "Move oldest download to backup folder.",
+          "kind": "shell",
+          "status": "pending",
+          "verify": true
+        },
+        {
+          "title": "List 5 most recent downloads with sizes.",
+          "kind": "shell",
+          "status": "pending",
+          "verify": true
+        },
+        {
+          "title": "Deliver list of 5 most recent downloads with sizes.",
+          "kind": "deliver",
+          "status": "pending",
+          "verify": false
+        }
+      ],
+      "verdicts": [],
+      "evidence": "benchmark\\evidence\\task-081-attempt-1.json",
+      "finishedAt": "2026-08-12T18:32:00.416Z"
+    },
+    {
+      "num": 82,
+      "text": "check my system info OS version RAM CPU and write a report to a text file",
+      "category": "G. Multi-Step & Complex Tasks",
+      "passed": false,
+      "state": "failed",
+      "attempts": 1,
+      "ms": 5033,
+      "error": "Stopped at step 1: Get System Info",
+      "report": "Stopped at step 1: Get System Info",
+      "missionId": "c3136faf1b",
+      "steps": [
+        {
+          "title": "Get System Info",
+          "kind": "shell",
+          "status": "failed",
+          "verify": false
+        },
+        {
+          "title": "Save to Report",
+          "kind": "shell",
+          "status": "pending",
+          "verify": true
+        }
+      ],
+      "verdicts": [],
+      "evidence": "benchmark\\evidence\\task-082-attempt-1.json",
+      "finishedAt": "2026-08-12T18:32:07.462Z"
+    },
+    {
+      "num": 83,
+      "text": "search for a free API fetch data from it and save the results as JSON",
+      "category": "G. Multi-Step & Complex Tasks",
+      "passed": false,
+      "state": "failed",
+      "attempts": 1,
+      "ms": 28609,
+      "error": "Stopped at step 1: Find a Free API",
+      "report": "Stopped at step 1: Find a Free API",
+      "missionId": "01027df87b",
+      "steps": [
+        {
+          "title": "Find a Free API",
+          "kind": "web",
+          "status": "failed",
+          "verify": false
+        },
+        {
+          "title": "Fetch Data",
+          "kind": "web",
+          "status": "pending",
+          "verify": false
+        },
+        {
+          "title": "Save Credentials",
+          "kind": "web",
+          "status": "pending",
+          "verify": true
+        },
+        {
+          "title": "Deliver Result",
+          "kind": "deliver",
+          "status": "pending",
+          "verify": false
+        }
+      ],
+      "verdicts": [],
+      "evidence": "benchmark\\evidence\\task-083-attempt-1.json",
+      "finishedAt": "2026-08-12T18:32:38.092Z"
+    },
+    {
+      "num": 84,
+      "text": "create a to-do list app in a single HTML file with JavaScript",
+      "category": "G. Multi-Step & Complex Tasks",
+      "passed": false,
+      "state": "failed",
+      "attempts": 1,
+      "ms": 1457,
+      "error": "Stopped at step 1: delegate",
+      "report": "Stopped at step 1: delegate",
+      "missionId": "fa3c704ebf",
+      "steps": [
+        {
+          "title": "delegate",
+          "kind": "delegate",
+          "status": "failed",
+          "verify": true
+        }
+      ],
+      "verdicts": [],
+      "evidence": "benchmark\\evidence\\task-084-attempt-1.json",
+      "finishedAt": "2026-08-12T18:32:41.563Z"
+    },
+    {
+      "num": 85,
+      "text": "download 3 different images from the web and save them in a folder called images",
+      "category": "G. Multi-Step & Complex Tasks",
+      "passed": false,
+      "state": "failed",
+      "attempts": 1,
+      "ms": 194561,
+      "error": "Stopped at step 1: download images",
+      "report": "Stopped at step 1: download images",
+      "missionId": "9b90683484",
+      "steps": [
+        {
+          "title": "download images",
+          "kind": "web",
+          "status": "failed",
+          "verify": false
+        },
+        {
+          "title": "create folder for images",
+          "kind": "shell",
+          "status": "pending",
+          "verify": true
+        },
+        {
+          "title": "move images to folder",
+          "kind": "shell",
+          "status": "pending",
+          "verify": true
+        }
+      ],
+      "verdicts": [],
+      "evidence": "benchmark\\evidence\\task-085-attempt-1.json",
+      "finishedAt": "2026-08-12T18:35:58.146Z"
+    },
+    {
+      "num": 86,
+      "text": "open a website that does not exist like https://thisisnotarealwebsite12345.com",
+      "category": "H. Error Handling & Edge Cases",
+      "passed": true,
+      "state": "done",
+      "attempts": 1,
+      "ms": 104498,
+      "error": null,
+      "report": "All 1 steps done.",
+      "missionId": "aa30bb7fc5",
+      "steps": [
+        {
+          "title": "Open non-existent website",
+          "kind": "web",
+          "status": "ok",
+          "verify": false
+        }
+      ],
+      "verdicts": [],
+      "evidence": "benchmark\\evidence\\task-086-attempt-1.json",
+      "finishedAt": "2026-08-12T18:37:44.670Z"
+    },
+    {
+      "num": 87,
+      "text": "download a file from a broken URL",
+      "category": "H. Error Handling & Edge Cases",
+      "passed": false,
+      "state": "failed",
+      "attempts": 1,
+      "ms": 2872,
+      "error": "Stopped at step 1: read the URL",
+      "report": "Stopped at step 1: read the URL",
+      "missionId": "1eb9d643b8",
+      "steps": [
+        {
+          "title": "read the URL",
+          "kind": "read",
+          "status": "failed",
+          "verify": false
+        },
+        {
+          "title": "message the URL",
+          "kind": "deliver",
+          "status": "pending",
+          "verify": false
+        }
+      ],
+      "verdicts": [],
+      "evidence": "benchmark\\evidence\\task-087-attempt-1.json",
+      "finishedAt": "2026-08-12T18:37:49.555Z"
+    },
+    {
+      "num": 88,
+      "text": "read a file that does not exist at C:\\nonexistent\\file.txt",
+      "category": "H. Error Handling & Edge Cases",
+      "passed": false,
+      "state": "failed",
+      "attempts": 1,
+      "ms": 2167,
+      "error": "All 1 steps done. But you did not get what you asked for: no file was produced at all",
+      "report": "All 1 steps done. But you did not get what you asked for: no file was produced at all",
+      "missionId": "6b0b47f258",
+      "steps": [
+        {
+          "title": "Check if file exists",
+          "kind": "shell",
+          "status": "ok",
+          "verify": false
+        }
+      ],
+      "verdicts": [],
+      "evidence": "benchmark\\evidence\\task-088-attempt-1.json",
+      "finishedAt": "2026-08-12T18:37:53.738Z"
+    },
+    {
+      "num": 89,
+      "text": "run a command that will fail like divide by zero in PowerShell",
+      "category": "H. Error Handling & Edge Cases",
+      "passed": false,
+      "state": "failed",
+      "attempts": 1,
+      "ms": 2160,
+      "error": "Stopped at step 1: fail",
+      "report": "Stopped at step 1: fail",
+      "missionId": "f4c2a055f1",
+      "steps": [
+        {
+          "title": "fail",
+          "kind": "shell",
+          "status": "failed",
+          "verify": false
+        }
+      ],
+      "verdicts": [],
+      "evidence": "benchmark\\evidence\\task-089-attempt-1.json",
+      "finishedAt": "2026-08-12T18:37:57.915Z"
+    },
+    {
+      "num": 90,
+      "text": "search for something with special characters like script tag alert xss",
+      "category": "H. Error Handling & Edge Cases",
+      "passed": false,
+      "state": "failed",
+      "attempts": 1,
+      "ms": 68649,
+      "error": "NIM returned something unparseable:\n{\"covers_brief\":false,\"missing\":[\"The brief the writer was given: script tag alert xss\"],\"unsupported\":[\"The draft they produced (HTML): <div class=\"",
+      "report": "NIM returned something unparseable:\n{\"covers_brief\":false,\"missing\":[\"The brief the writer was given: script tag alert xss\"],\"unsupported\":[\"The draft they produced (HTML): <div class=\"",
+      "missionId": "f01973195a",
+      "steps": [
+        {
+          "title": "Research",
+          "kind": "research",
+          "status": "running",
+          "verify": false
+        },
+        {
+          "title": "Convert to PDF",
+          "kind": "shell",
+          "status": "pending",
+          "verify": true
+        },
+        {
+          "title": "Deliver PDF",
+          "kind": "deliver",
+          "status": "pending",
+          "verify": false
+        }
+      ],
+      "verdicts": [],
+      "evidence": "benchmark\\evidence\\task-090-attempt-1.json",
+      "finishedAt": "2026-08-12T18:39:08.576Z"
+    },
+    {
+      "num": 91,
+      "text": "create a file with a very long name over 200 characters",
+      "category": "H. Error Handling & Edge Cases",
+      "passed": false,
+      "state": "failed",
+      "attempts": 1,
+      "ms": 4318,
+      "error": "Stopped at step 1: Generate long filename",
+      "report": "Stopped at step 1: Generate long filename",
+      "missionId": "7f15bfb413",
+      "steps": [
+        {
+          "title": "Generate long filename",
+          "kind": "shell",
+          "status": "failed",
+          "verify": false
+        },
+        {
+          "title": "Create the file",
+          "kind": "shell",
+          "status": "pending",
+          "verify": false
+        }
+      ],
+      "verdicts": [],
+      "evidence": "benchmark\\evidence\\task-091-attempt-1.json",
+      "finishedAt": "2026-08-12T18:39:14.903Z"
+    },
+    {
+      "num": 92,
+      "text": "create 100 files in a folder and then list them all",
+      "category": "H. Error Handling & Edge Cases",
+      "passed": false,
+      "state": "failed",
+      "attempts": 1,
+      "ms": 6465,
+      "error": "Stopped at step 2: List the files",
+      "report": "Stopped at step 2: List the files",
+      "missionId": "4035a6f77e",
+      "steps": [
+        {
+          "title": "Create 100 files",
+          "kind": "shell",
+          "status": "ok",
+          "verify": true
+        },
+        {
+          "title": "List the files",
+          "kind": "shell",
+          "status": "failed",
+          "verify": true
+        },
+        {
+          "title": "Deliver the list",
+          "kind": "deliver",
+          "status": "pending",
+          "verify": false
+        }
+      ],
+      "verdicts": [],
+      "evidence": "benchmark\\evidence\\task-092-attempt-1.json",
+      "finishedAt": "2026-08-12T18:39:23.386Z"
+    },
+    {
+      "num": 93,
+      "text": "try to delete a folder that does not exist",
+      "category": "H. Error Handling & Edge Cases",
+      "passed": false,
+      "state": "failed",
+      "attempts": 1,
+      "ms": 2153,
+      "error": "refused (recursive delete): rm -Force 'D:\\wobo\\NonExistentFolder'",
+      "report": "refused (recursive delete): rm -Force 'D:\\wobo\\NonExistentFolder'",
+      "missionId": "6dba616612",
+      "steps": [
+        {
+          "title": "Delete non-existent folder",
+          "kind": "shell",
+          "status": "running",
+          "verify": true
+        }
+      ],
+      "verdicts": [],
+      "evidence": "benchmark\\evidence\\task-093-attempt-1.json",
+      "finishedAt": "2026-08-12T18:39:27.553Z"
+    },
+    {
+      "num": 94,
+      "text": "open a website in a language you do not know and try to read it",
+      "category": "H. Error Handling & Edge Cases",
+      "passed": false,
+      "state": "failed",
+      "attempts": 1,
+      "ms": 99437,
+      "error": "Stopped at step 3: Render the website to PDF",
+      "report": "Stopped at step 3: Render the website to PDF",
+      "missionId": "85db8d5634",
+      "steps": [
+        {
+          "title": "Research website translation",
+          "kind": "research",
+          "status": "ok",
+          "verify": false
+        },
+        {
+          "title": "Try to read the website",
+          "kind": "web",
+          "status": "ok",
+          "verify": false
+        },
+        {
+          "title": "Render the website to PDF",
+          "kind": "shell",
+          "status": "failed",
+          "verify": true
+        }
+      ],
+      "verdicts": [],
+      "evidence": "benchmark\\evidence\\task-094-attempt-1.json",
+      "finishedAt": "2026-08-12T18:41:09.015Z"
+    },
+    {
+      "num": 95,
+      "text": "do a task then immediately ask to undo it",
+      "category": "H. Error Handling & Edge Cases",
+      "passed": false,
+      "state": "failed",
+      "attempts": 1,
+      "ms": 4296,
+      "error": "Stopped at step 1: Perform task A",
+      "report": "Stopped at step 1: Perform task A",
+      "missionId": "566011b774",
+      "steps": [
+        {
+          "title": "Perform task A",
+          "kind": "shell",
+          "status": "failed",
+          "verify": false
+        },
+        {
+          "title": "Take screenshot",
+          "kind": "computer",
+          "status": "pending",
+          "verify": true
+        },
+        {
+          "title": "Undo task A",
+          "kind": "shell",
+          "status": "pending",
+          "verify": false
+        }
+      ],
+      "verdicts": [],
+      "evidence": "benchmark\\evidence\\task-095-attempt-1.json",
+      "finishedAt": "2026-08-12T18:41:15.326Z"
+    },
+    {
+      "num": 96,
+      "text": "create a text file and send it to me on telegram",
+      "category": "I. Telegram & Delivery",
+      "passed": true,
+      "state": "done",
+      "attempts": 1,
+      "ms": 83722,
+      "error": null,
+      "report": "All 3 steps done.",
+      "missionId": "ad0d6c0eb7",
+      "steps": [
+        {
+          "title": "Create a text file",
+          "kind": "shell",
+          "status": "ok",
+          "verify": false
+        },
+        {
+          "title": "Create some text in the file",
+          "kind": "shell",
+          "status": "ok",
+          "verify": false
+        },
+        {
+          "title": "Send the text file to the owner on Telegram",
+          "kind": "deliver",
+          "status": "ok",
+          "verify": false
+        }
+      ],
+      "verdicts": [],
+      "evidence": "benchmark\\evidence\\task-096-attempt-1.json",
+      "finishedAt": "2026-08-12T18:42:41.062Z"
+    },
+    {
+      "num": 97,
+      "text": "research something and send me the report on telegram",
+      "category": "I. Telegram & Delivery",
+      "passed": false,
+      "state": "failed",
+      "attempts": 1,
+      "ms": 218320,
+      "error": "NIM returned something unparseable:\n{\n  \"covers_brief\": true,\n  \"missing\": [],\n  \"unsupported\": [\n    \"The impacts of climate change on ecosystems are complex and context-specific, and can lead to negative, neutral, or positive outcomes.\",\n    \"Climate change is expected to increasingly impact the provision and value of welfare-enhancing ecosystem services in the US and around the world.\",\n    \"The effects of climate change on ecosy",
+      "report": "NIM returned something unparseable:\n{\n  \"covers_brief\": true,\n  \"missing\": [],\n  \"unsupported\": [\n    \"The impacts of climate change on ecosystems are complex and context-specific, and can lead to negative, neutral, or positive outcomes.\",\n    \"Climate change is expected to increasingly impact the provision and value of welfare-enhancing ecosystem services in the US and around the world.\",\n    \"The effects of climate change on ecosy",
+      "missionId": "35541e4486",
+      "steps": [
+        {
+          "title": "Research the topic",
+          "kind": "research",
+          "status": "running",
+          "verify": false
+        },
+        {
+          "title": "Send the report to Telegram",
+          "kind": "deliver",
+          "status": "pending",
+          "verify": false
+        }
+      ],
+      "verdicts": [],
+      "evidence": "benchmark\\evidence\\task-097-attempt-1.json",
+      "finishedAt": "2026-08-12T18:46:21.396Z"
+    },
+    {
+      "num": 98,
+      "text": "take a screenshot and send it to me",
+      "category": "I. Telegram & Delivery",
+      "passed": false,
+      "state": "not-started",
+      "attempts": 1,
+      "ms": 0,
+      "error": "POST /api/mission answered 409: {\"error\":\"Woboo is already on a mission\"}",
+      "report": "",
+      "missionId": null,
+      "steps": [],
+      "verdicts": [],
+      "evidence": null,
+      "finishedAt": "2026-08-12T17:02:08.599Z"
+    },
+    {
+      "num": 99,
+      "text": "create an HTML file then send me a summary of it on telegram",
+      "category": "I. Telegram & Delivery",
+      "passed": false,
+      "state": "not-started",
+      "attempts": 1,
+      "ms": 0,
+      "error": "POST /api/mission answered 409: {\"error\":\"Woboo is already on a mission\"}",
+      "report": "",
+      "missionId": null,
+      "steps": [],
+      "verdicts": [],
+      "evidence": null,
+      "finishedAt": "2026-08-12T17:02:12.137Z"
+    },
+    {
+      "num": 100,
+      "text": "send me a list of the last 5 missions you completed",
+      "category": "I. Telegram & Delivery",
+      "passed": false,
+      "state": "not-started",
+      "attempts": 1,
+      "ms": 0,
+      "error": "POST /api/mission answered 409: {\"error\":\"Woboo is already on a mission\"}",
+      "report": "",
+      "missionId": null,
+      "steps": [],
+      "verdicts": [],
+      "evidence": null,
+      "finishedAt": "2026-08-12T17:02:15.650Z"
     }
   ],
   "summary": {
-    "tasks": 50,
-    "passed": 43,
-    "failed": 7,
-    "passRate": "86%",
+    "tasks": 100,
+    "passed": 54,
+    "passRate": "54%",
     "byCategory": {
       "shell": "15/15",
-      "environment": "8/10",
+      "environment": "9/10",
       "browser": "11/15",
-      "downloads": "9/10"
+      "downloads": "9/10",
+      "research": "1/15",
+      "files": "7/10",
+      "multistep": "0/10",
+      "errorHandling": "1/10",
+      "telegram": "1/5"
     },
-    "browserBeforeFixes": "0/15",
-    "browserAfterFixes": "11/15",
-    "downloadsBeforeFixes": "4/10",
-    "downloadsAfterFixes": "9/10",
-    "failedTasks": [
-      20,
-      25,
-      26,
-      33,
-      36,
-      39,
-      42
-    ],
-    "failureClasses": {
-      "guardConservative": [
-        20,
-        25
-      ],
-      "externalBotDetection": [
-        26,
-        36
-      ],
-      "externalFlaky": [
-        33
-      ],
-      "formFillStuck": [
-        39
-      ],
-      "inlinePdfRender": [
-        42
-      ]
+    "verifiedWithHealthyBrain": {
+      "1-50": "44/50",
+      "files 66-75": "7/10"
     },
-    "totalSeconds": 7562,
-    "avgSeconds": 151,
-    "medianSeconds": 114,
-    "wobooFixCommits": 10,
-    "unitTests": "133/133",
+    "externalBlocker": "NIM free-tier degraded ~17:00 mid-run: capable models (120B nemotron, 70B) throttled to timeouts; only weak 8B reliable. Categories E/G/H/I ran under degradation. Brain switched 120B->70B->8B->120B as availability shifted. Re-run on recovering 120B in progress.",
+    "wobooFixCommits": 16,
+    "unitTests": "134/134",
     "regressions": 0,
-    "humanInterventions": 0
+    "humanInterventions": 0,
+    "passedTasks": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      21,
+      22,
+      23,
+      24,
+      25,
+      27,
+      28,
+      29,
+      30,
+      31,
+      32,
+      34,
+      35,
+      37,
+      38,
+      40,
+      41,
+      43,
+      44,
+      45,
+      46,
+      47,
+      48,
+      49,
+      50,
+      52,
+      66,
+      68,
+      70,
+      71,
+      72,
+      73,
+      75,
+      86,
+      96
+    ]
   },
-  "scope": "tasks 1-50"
+  "scope": "tasks 1-100"
 }
