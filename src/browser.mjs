@@ -377,7 +377,7 @@ export async function clickHumanCheck() {
   // Give it a moment, then say whether the page actually moved on.
   await new Promise((r) => setTimeout(r, 4000));
   const still = await evaluate(
-    `/just a moment|verify you are human|checking your browser|needs to review the security/i.test(document.body.innerText || '')`,
+    `/just a moment|verify you are human|checking your browser|needs to review the security/i.test((document.body || document.documentElement || {}).innerText || '')`,
   );
   return still
     ? { ok: false, error: 'the check did not pass — it scores how the pointer moved, not just the click' }
@@ -555,7 +555,7 @@ const COLLECT = (startIndex = 0) => `((START) => {
     // "not shown" rather than "does not exist".
     dialog: dialogs.length ? (dialogs[dialogs.length - 1].getAttribute('aria-label') || 'dialog') : null,
     truncated: out.length >= 150,
-    text: ((scope === document ? document.body : scope).innerText || '').replace(/\\n{3,}/g, '\\n\\n').slice(0, 6000),
+    text: (((scope === document ? document.body : scope) || document.documentElement || {}).innerText || '').replace(/\\n{3,}/g, '\\n\\n').slice(0, 6000),
   };
 })(${Number(startIndex)})`;
 
@@ -874,7 +874,7 @@ export async function scroll(amount = 600) {
 
 // Everything a reader would see, for when the task is "what does this page say".
 export async function readText() {
-  return evaluate(`(document.body.innerText || '').slice(0, 20000)`);
+  return evaluate(`((document.body || document.documentElement || {}).innerText || '').slice(0, 20000)`);
 }
 
 // The exact rendered colour of an element — the thing a screenshot can only

@@ -24,6 +24,29 @@ import * as browser from './browser.mjs';
 // find it.
 const WANTS_SHOT = /\b(screenshot|screen[\s-]?shot|screen capture|capture the (page|screen)|take a (shot|picture|photo) of)\b/i;
 
+// A download is a deliverable: "download the installer" ends with a file, and
+// that file was landing in the OS temp directory where nothing looked for it,
+// so the mission reported producing nothing. Bring the finished file into the
+// workspace and hand its path back so it becomes a registered artifact. Only a
+// completed file counts — Chrome names an in-progress download <name>.crdownload
+// and renames it on completion, so if only the .crdownload exists it is not done.
+function harvestDownload(workspace) {
+  const name = browser.lastDownloadFilename();
+  if (!name) return null;
+  const src = path.join(browser.downloadDir(), name);
+  try {
+    if (!fs.existsSync(src)) return null;
+    const dir = workspace || process.cwd();
+    fs.mkdirSync(dir, { recursive: true });
+    const dest = path.join(dir, name);
+    if (path.resolve(src) !== path.resolve(dest)) fs.copyFileSync(src, dest);
+    return dest;
+  } catch {
+    // Copy failed (permissions, disk) — the temp file is still a real artifact.
+    return fs.existsSync(src) ? src : null;
+  }
+}
+
 async function saveShot(workspace, pageUrl) {
   try {
     const data = await browser.screenshot();
@@ -295,9 +318,17 @@ export async function browse({ goal, url = null, maxSteps = 14, ask, onProgress,
         say(`download in progress: ${name} — the page is blank because the file is saving, not because navigation failed`, 'ok');
         recent.length = 0;
         history.push(`${step}. goto triggered download: ${name} (page is blank because the file is saving)`);
-        // Wait for the download to finish so the file is on disk before the next step.
-        await browser.waitForDownloads();
-        continue;
+        // Wait for the download to finish so the file is on disk, then hand it
+        // back: the download was the goal, and a blank page after it is success.
+        await browser.waitForDownloads(180_000);
+        const file = harvestDownload(workspace);
+        return {
+          ok: true,
+          out: file ? `downloaded ${path.basename(file)}` : `download completed: ${name}`,
+          file: file || undefined,
+          url: page.url,
+          steps: step,
+        };
       }
       setFace('confused', 'stuck in a loop');
       return {
@@ -370,10 +401,17 @@ export async function browse({ goal, url = null, maxSteps = 14, ask, onProgress,
             const name = browser.lastDownloadFilename() || 'file';
             say(`download started: ${name}`, 'ok');
             history.push(`${step}. goto ${target.slice(0, 60)} — download started: ${name}`);
-            // Wait for the download to fully complete before moving on.
-            // Without this, the next step (e.g. install) runs before the file is on disk.
-            await browser.waitForDownloads();
-            continue;
+            // Wait for the file to be fully on disk, then bring it into the
+            // workspace and return it — downloading it was the whole goal.
+            await browser.waitForDownloads(180_000);
+            const file = harvestDownload(workspace);
+            return {
+              ok: true,
+              out: file ? `downloaded ${path.basename(file)}` : `download completed: ${name}`,
+              file: file || undefined,
+              url: page.url,
+              steps: step,
+            };
           }
         } else if (target) {
           record('web', `"${target.slice(0, 40)}" is not a url — searching for it instead`, { level: 'warn' });
