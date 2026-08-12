@@ -158,7 +158,7 @@ export async function resolvesPublicly(host, lookup = (h) => dns.lookup(h, { all
 // validated. A name whose answer flips private in the instant between check
 // and connect can still slip through; closing that window takes an undici
 // Agent with a validating lookup, and undici is not a dependency here.
-async function fetchScreened(url, { lookup, ...options } = {}) {
+export async function fetchScreened(url, { lookup, ...options } = {}) {
   let current = url;
   for (let hop = 0; ; hop++) {
     const host = new URL(current).hostname.replace(/^\[|\]$/g, '');

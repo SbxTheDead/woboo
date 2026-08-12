@@ -16,6 +16,33 @@ import { publish } from './bus.mjs';
 import { setFace } from './face.mjs';
 import { assertLive } from './guard.mjs';
 import * as browser from './browser.mjs';
+import { fetchScreened } from './sources.mjs';
+
+// A "download the PDF" goal ends with a file — but Chrome renders a PDF (or an
+// image, or plain text) inline instead of downloading it, so no download event
+// fires and nothing lands on disk. When the goal wanted a file and the page is
+// itself a direct file URL, fetch those bytes (through the same SSRF screen the
+// researcher uses) and save them into the workspace.
+const WANTS_DOWNLOAD = /\b(download|save|fetch|grab|get)\b.*\b(file|pdf|installer|image|zip|document|to my|into|save)\b|\bdownload\b/i;
+const DIRECT_FILE = /\.(pdf|zip|png|jpe?g|gif|svg|csv|json|txt|md|docx?|xlsx?|exe|msi|mp3|mp4|xml)(?:[?#].*)?$/i;
+
+async function fetchInlineFile(pageUrl, workspace) {
+  try {
+    if (!DIRECT_FILE.test(new URL(pageUrl).pathname)) return null;
+    const res = await fetchScreened(pageUrl, { headers: { 'user-agent': 'Woboo/0.2' } });
+    if (!res?.ok) return null;
+    const bytes = Buffer.from(await res.arrayBuffer());
+    if (!bytes.length) return null;
+    const dir = workspace || process.cwd();
+    fs.mkdirSync(dir, { recursive: true });
+    const name = path.basename(new URL(pageUrl).pathname) || 'download';
+    const file = path.join(dir, name);
+    fs.writeFileSync(file, bytes);
+    return file;
+  } catch {
+    return null;
+  }
+}
 
 // "take a screenshot" is a browser task whose deliverable is a file, not a line
 // of text — and the pilot, having navigated to the page, would say "done" and
@@ -227,6 +254,7 @@ function isCredentialField(element) {
 
 export async function browse({ goal, url = null, maxSteps = 14, ask, onProgress, workspace = null } = {}) {
   const wantsShot = WANTS_SHOT.test(String(goal || ''));
+  const wantsDownload = WANTS_DOWNLOAD.test(String(goal || ''));
   const say = (message, level = 'info') => {
     record('web', message, { level });
     if (onProgress) onProgress(message);
@@ -347,6 +375,16 @@ export async function browse({ goal, url = null, maxSteps = 14, ask, onProgress,
 
     if (decision.action === 'done') {
       setFace('happy', 'done');
+      // A download goal that ended on a file the browser rendered inline (a PDF
+      // viewer, an image) never fired a download event — fetch the bytes and
+      // save them so the mission gets its file.
+      if (wantsDownload && !browser.lastDownloadFilename()) {
+        const file = await fetchInlineFile(page.url, workspace);
+        if (file) {
+          say(`saved ${path.basename(file)} from ${page.url}`, 'ok');
+          return { ok: true, out: `saved ${path.basename(file)}`, steps: step, url: page.url, file };
+        }
+      }
       // A screenshot goal owes a file. Capture the page now, while the browser
       // is still on it, and hand the path back so the mission has its artifact.
       if (wantsShot) {
