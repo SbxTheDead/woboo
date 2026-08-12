@@ -1,6 +1,6 @@
 {
   "startedAt": 1786488339943,
-  "endedAt": 1786541519666,
+  "endedAt": 1786544919012,
   "tasks": [
     {
       "num": 1,
@@ -918,30 +918,30 @@
       "category": "C. Browser Navigation & Reading",
       "passed": false,
       "state": "failed",
-      "attempts": 2,
-      "ms": 146829,
-      "error": "Stopped at step 1: Fetch HTML content from httpbin.org/html",
-      "report": "Stopped at step 1: Fetch HTML content from httpbin.org/html",
-      "missionId": "1d67c2da39",
+      "attempts": 1,
+      "ms": 315085,
+      "error": "Stopped at step 1: Fetch the page content from httpbin.org/html",
+      "report": "Stopped at step 1: Fetch the page content from httpbin.org/html",
+      "missionId": "e1d479812e",
       "steps": [
         {
-          "title": "Fetch HTML content from httpbin.org/html",
+          "title": "Fetch the page content from httpbin.org/html",
           "kind": "web",
           "status": "failed",
           "verify": false
         },
         {
-          "title": "Display the fetched HTML content",
+          "title": "Read and output the fetched page content",
           "kind": "shell",
           "status": "pending",
           "verify": true
         }
       ],
       "verdicts": [],
-      "evidence": "benchmark\\evidence\\task-033-attempt-2.json",
-      "finishedAt": "2026-08-12T12:33:36.936Z",
-      "rootCausePattern": "external-flaky+over-decomposition",
-      "rootCause": "httpbin.org/html intermittently failed at fetch; on other runs the brain split read into fetch+display where step 2 assumed a file the web step never saved."
+      "evidence": "benchmark\\evidence\\task-033-attempt-1.json",
+      "finishedAt": "2026-08-12T13:57:16.777Z",
+      "rootCausePattern": "external-flaky",
+      "rootCause": "httpbin.org/html intermittently unreachable at fetch (step 1 failed on every retry this run)."
     },
     {
       "num": 34,
@@ -1156,13 +1156,13 @@
       "passed": false,
       "state": "failed",
       "attempts": 1,
-      "ms": 190777,
-      "error": "All 1 steps done. But you did not get what you asked for: The owner did not receive a saved test PDF file from W3.org in the D:/wobo directory.",
-      "report": "All 1 steps done. But you did not get what you asked for: The owner did not receive a saved test PDF file from W3.org in the D:/wobo directory.",
-      "missionId": "f2943d0b49",
+      "ms": 205827,
+      "error": "All 1 steps done. But you did not get what you asked for: The owner did not receive a test PDF file from w3.org saved in D:wobo.",
+      "report": "All 1 steps done. But you did not get what you asked for: The owner did not receive a test PDF file from w3.org saved in D:wobo.",
+      "missionId": "7df4a230c2",
       "steps": [
         {
-          "title": "Download a test PDF from W3.org test files",
+          "title": "Download w3.org test PDF",
           "kind": "web",
           "status": "ok",
           "verify": false
@@ -1170,71 +1170,73 @@
       ],
       "verdicts": [
         {
-          "deliverable": "A test PDF file from W3.org test suite saved locally in the workspace",
+          "deliverable": "a test PDF file from w3.org saved in D:wobo",
           "met": false,
-          "evidence": "No files were produced in the workspace; the web step only reported viewing a PDF page but did not save any file locally."
+          "evidence": "No files were produced in D:wobo; the download step reported the PDF file appears empty or contains no extractable text content, indicating no valid PDF was saved."
         }
       ],
       "evidence": "benchmark\\evidence\\task-042-attempt-1.json",
-      "finishedAt": "2026-08-12T12:51:27.222Z",
-      "rootCausePattern": "download-artifact-location",
-      "rootCause": "The PDF downloaded to ~/.woboo/downloads, not the workspace, so it was never registered as a mission artifact — the task-2 class, one subsystem over."
+      "finishedAt": "2026-08-12T14:00:44.625Z",
+      "rootCausePattern": "inline-pdf-render",
+      "rootCause": "w3.org test PDF opens inline in Chrome viewer (0 download events), so nothing downloads to harvest. Would need to fetch the direct .pdf URL and save it."
     },
     {
       "num": 43,
       "text": "download the latest Node.js installer for Windows",
       "category": "D. Browser Downloads",
-      "passed": false,
-      "state": "failed",
+      "passed": true,
+      "state": "done",
       "attempts": 1,
-      "ms": 221405,
-      "error": "All 2 steps done. But you did not get what you asked for: no file was produced at all",
-      "report": "All 2 steps done. But you did not get what you asked for: no file was produced at all",
-      "missionId": "684db27f8e",
+      "ms": 507507,
+      "error": null,
+      "report": "All 2 steps done. 1 deliverable(s) checked against what you asked for.",
+      "missionId": "d2cf06a59b",
       "steps": [
         {
-          "title": "Determine the latest Node.js Windows installer URL",
+          "title": "Determine the latest Node.js version for Windows",
           "kind": "web",
           "status": "ok",
           "verify": false
         },
         {
-          "title": "Download the latest Node.js Windows installer to workspace",
+          "title": "Download the Node.js Windows installer",
+          "kind": "web",
+          "status": "ok",
+          "verify": false
+        }
+      ],
+      "verdicts": [
+        {
+          "deliverable": "The latest Node.js installer for Windows saved as a file",
+          "met": true,
+          "evidence": "File node-latest-x64.msi exists (35504KB) and was downloaded after determining the latest Node.js version for Windows is v26.7.0"
+        }
+      ],
+      "evidence": "benchmark\\evidence\\task-043-attempt-1.json",
+      "finishedAt": "2026-08-12T14:09:14.143Z"
+    },
+    {
+      "num": 44,
+      "text": "download the Python installer from python.org",
+      "category": "D. Browser Downloads",
+      "passed": true,
+      "state": "done",
+      "attempts": 1,
+      "ms": 288578,
+      "error": null,
+      "report": "All 1 steps done.",
+      "missionId": "be1d877cbd",
+      "steps": [
+        {
+          "title": "Download Python installer from python.org",
           "kind": "web",
           "status": "ok",
           "verify": false
         }
       ],
       "verdicts": [],
-      "evidence": "benchmark\\evidence\\task-043-attempt-1.json",
-      "finishedAt": "2026-08-12T12:55:10.650Z",
-      "rootCausePattern": "download-artifact-location",
-      "rootCause": "Node installer downloaded but not registered as an artifact in the workspace."
-    },
-    {
-      "num": 44,
-      "text": "download the Python installer from python.org",
-      "category": "D. Browser Downloads",
-      "passed": false,
-      "state": "failed",
-      "attempts": 1,
-      "ms": 544056,
-      "error": "TypeError: Cannot read properties of null (reading 'innerText')\n    at <anonymous>:1:16",
-      "report": "TypeError: Cannot read properties of null (reading 'innerText')\n    at <anonymous>:1:16",
-      "missionId": "a992e900ac",
-      "steps": [
-        {
-          "title": "Download Python Windows installer from python.org",
-          "kind": "web",
-          "status": "running",
-          "verify": false
-        }
-      ],
-      "verdicts": [],
       "evidence": "benchmark\\evidence\\task-044-attempt-1.json",
-      "finishedAt": "2026-08-12T13:04:16.726Z",
-      "rootCausePattern": "browser-null-crash",
-      "rootCause": "TypeError: reading innerText of a null element reference in the DOM snapshot — a robustness bug on python.org."
+      "finishedAt": "2026-08-12T14:14:04.736Z"
     },
     {
       "num": 45,
@@ -1309,70 +1311,87 @@
       "num": 48,
       "text": "download a text file from textfiles.com",
       "category": "D. Browser Downloads",
-      "passed": false,
-      "state": "running",
+      "passed": true,
+      "state": "done",
       "attempts": 1,
-      "ms": 900050,
-      "error": "timed out after 900s",
-      "report": "",
-      "missionId": null,
-      "steps": [],
+      "ms": 262251,
+      "error": null,
+      "report": "All 1 steps done.",
+      "missionId": "f522ef7f97",
+      "steps": [
+        {
+          "title": "Download a text file from textfiles.com",
+          "kind": "web",
+          "status": "ok",
+          "verify": false
+        }
+      ],
       "verdicts": [],
       "evidence": "benchmark\\evidence\\task-048-attempt-1.json",
-      "finishedAt": "2026-08-12T13:31:50.599Z",
-      "rootCausePattern": "download-artifact-location",
-      "rootCause": "textfiles.com text file downloaded but not registered/located as a workspace artifact."
+      "finishedAt": "2026-08-12T14:18:29.006Z"
     },
     {
       "num": 49,
       "text": "download the Git installer for Windows",
       "category": "D. Browser Downloads",
-      "passed": false,
-      "state": "not-started",
+      "passed": true,
+      "state": "done",
       "attempts": 1,
-      "ms": 0,
-      "error": "POST /api/mission answered 409: {\"error\":\"Woboo is already on a mission\"}",
-      "report": "",
-      "missionId": null,
-      "steps": [],
+      "ms": 281318,
+      "error": null,
+      "report": "All 1 steps done.",
+      "missionId": "40977faa93",
+      "steps": [
+        {
+          "title": "Download Git installer for Windows",
+          "kind": "web",
+          "status": "ok",
+          "verify": false
+        }
+      ],
       "verdicts": [],
-      "evidence": null,
-      "finishedAt": "2026-08-12T13:31:54.119Z",
-      "rootCausePattern": "download-artifact-location",
-      "rootCause": "Git installer downloaded but not registered as a workspace artifact."
+      "evidence": "benchmark\\evidence\\task-049-attempt-1.json",
+      "finishedAt": "2026-08-12T14:23:12.335Z"
     },
     {
       "num": 50,
       "text": "download the Discord installer",
       "category": "D. Browser Downloads",
-      "passed": false,
-      "state": "not-started",
+      "passed": true,
+      "state": "done",
       "attempts": 1,
-      "ms": 0,
-      "error": "POST /api/mission answered 409: {\"error\":\"Woboo is already on a mission\"}",
-      "report": "",
-      "missionId": null,
-      "steps": [],
+      "ms": 322662,
+      "error": null,
+      "report": "All 1 steps done.",
+      "missionId": "eb94f4b6b3",
+      "steps": [
+        {
+          "title": "Download Discord installer",
+          "kind": "web",
+          "status": "ok",
+          "verify": false
+        }
+      ],
       "verdicts": [],
-      "evidence": null,
-      "finishedAt": "2026-08-12T13:31:57.661Z",
-      "rootCausePattern": "download-artifact-location",
-      "rootCause": "Discord installer downloaded but not registered as a workspace artifact."
+      "evidence": "benchmark\\evidence\\task-050-attempt-1.json",
+      "finishedAt": "2026-08-12T14:28:37.002Z"
     }
   ],
   "summary": {
     "tasks": 50,
-    "passed": 38,
-    "failed": 12,
-    "passRate": "76%",
+    "passed": 43,
+    "failed": 7,
+    "passRate": "86%",
     "byCategory": {
       "shell": "15/15",
       "environment": "8/10",
       "browser": "11/15",
-      "downloads": "4/10"
+      "downloads": "9/10"
     },
     "browserBeforeFixes": "0/15",
     "browserAfterFixes": "11/15",
+    "downloadsBeforeFixes": "4/10",
+    "downloadsAfterFixes": "9/10",
     "failedTasks": [
       20,
       25,
@@ -1380,17 +1399,31 @@
       33,
       36,
       39,
-      42,
-      43,
-      44,
-      48,
-      49,
-      50
+      42
     ],
-    "totalSeconds": 7382,
-    "avgSeconds": 148,
-    "medianSeconds": 72,
-    "wobooFixCommits": 8,
+    "failureClasses": {
+      "guardConservative": [
+        20,
+        25
+      ],
+      "externalBotDetection": [
+        26,
+        36
+      ],
+      "externalFlaky": [
+        33
+      ],
+      "formFillStuck": [
+        39
+      ],
+      "inlinePdfRender": [
+        42
+      ]
+    },
+    "totalSeconds": 7562,
+    "avgSeconds": 151,
+    "medianSeconds": 114,
+    "wobooFixCommits": 10,
     "unitTests": "133/133",
     "regressions": 0,
     "humanInterventions": 0
