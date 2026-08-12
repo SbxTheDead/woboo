@@ -77,11 +77,13 @@ const PLAN_SCHEMA = {
           title: { type: 'string', description: 'Short imperative label, under 60 chars.' },
           kind: {
             type: 'string',
-            enum: ['research', 'web', 'delegate', 'shell', 'compose', 'computer', 'inspect', 'deliver', 'read'],
+            enum: ['research', 'web', 'delegate', 'shell', 'write', 'compose', 'computer', 'inspect', 'deliver', 'read'],
             description:
               'research = search the web, read sources, write a cited report and render it to PDF, all in one step; ' +
               'web = drive a real browser through the DOM: click real elements, fill forms, read pages; ' +
               'delegate = hand a spec to the installed coding tool; shell = run a command directly; ' +
+              'write = create a file with exact content you provide — JSON, CSV, HTML, code, config: put the path in ' +
+              'instruction and the full file body in content, and Woboo writes it verbatim with no shell quoting to break; ' +
               'compose = read local files and WRITE a document from them; ' +
               'computer = drive the mouse and keyboard on screen like a person; inspect = look at the screen; ' +
               'deliver = send a finished file to the owner on Telegram (instruction is just the file path); ' +
@@ -91,8 +93,15 @@ const PLAN_SCHEMA = {
             type: 'string',
             description:
               'For delegate: the full spec to hand the coding tool. For shell: the exact command. ' +
+              'For write: the file path to create (just the path — the body goes in content). ' +
               'For computer: the on-screen goal, stated so someone sitting at the machine could follow it. ' +
               'For inspect: what to look for.',
+          },
+          content: {
+            type: 'string',
+            description:
+              'ONLY for a write step: the exact, complete file body to save — real JSON, CSV, HTML or code, not a ' +
+              'description of it. Empty for every other kind.',
           },
           verify: {
             type: 'string',
@@ -228,6 +237,12 @@ reporting back. Plan for that shape:
       if ((Test-Path 'x') -and ((Get-Item 'x').Length -gt 0)) { exit 0 } else { exit 1 }
   Commands that already exit properly on failure — npm test, git, tsc — need no
   wrapping.
+- To create a file with specific content — a JSON file, a CSV, an HTML page, a
+  script, a config — use a "write" step, never a shell command. Put the path in
+  instruction and the real, complete file body in content. Woboo writes it byte
+  for byte, so there is no quoting, no here-string and no escaping to get wrong.
+  Writing a JSON array through Set-Content or powershell -Command is how these
+  steps break; a write step cannot break that way.
 - Use "shell" steps for setup and checks, never for tasks a coding tool should do.
 - To run a script you just made — a .bat, .cmd or .ps1 — invoke it with the call
   operator: the ampersand followed by the quoted path, for example

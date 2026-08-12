@@ -179,6 +179,9 @@ export async function runMission(task, { workspace } = {}) {
       title: step.title,
       kind: step.kind,
       instruction: step.instruction,
+      // The exact body a write step puts on disk. Cherry-picking the step fields
+      // here silently dropped it, so every write step wrote an empty file.
+      content: typeof step.content === 'string' ? step.content : '',
       verify: step.verify || '',
       status: 'pending',
       attempts: 0,
@@ -707,6 +710,27 @@ async function executeStep(i, { cwd, member, task }) {
       if (seen.length > 40) {
         findings.push({ file: `${step.title} (read from the web)`, text: seen });
       }
+    } else if (step.kind === 'write') {
+      // Create a file with exact content, without a shell in the middle. The
+      // planner kept trying to write a JSON array or a CSV through
+      // `powershell -Command @'...'@ | Set-Content`, and the here-string, the
+      // quotes and the escaping broke it every time. A write step carries the
+      // body as data, so Woboo puts it on disk verbatim — nothing to escape.
+      const named = String(instruction).match(/([^\s'"<>|]+\.[A-Za-z0-9]{1,8})/)?.[1] || String(instruction).trim();
+      const target = path.resolve(cwd, named.replace(/^['"]|['"]$/g, ''));
+      const body = typeof step.content === 'string' ? step.content : '';
+      try {
+        if (!body) {
+          work = { ok: false, out: `write step for ${path.basename(target)} had no content to write` };
+        } else {
+          fs.mkdirSync(path.dirname(target), { recursive: true });
+          fs.writeFileSync(target, body, 'utf8');
+          work = { ok: true, out: `wrote ${path.basename(target)} — ${body.length} characters`, file: target };
+          record('write', `${path.basename(target)} — ${body.length} characters`, { level: 'ok' });
+        }
+      } catch (err) {
+        work = { ok: false, out: `could not write ${path.basename(target)}: ${err.message}` };
+      }
     } else if (step.kind === 'read') {
       // Text out of a document, without a shell, a package, or three levels of
       // quoting. "path/in.pdf" or "path/in.pdf -> path/out.txt".
@@ -854,7 +878,7 @@ async function executeStep(i, { cwd, member, task }) {
     // A "read" belongs here too: a file that is not on disk will not be on disk
     // the second and third time either, and running the identical step three
     // times produced three identical ENOENTs and a step reported as unprovable.
-    const DEFINITIVE = new Set(['deliver', 'compose', 'research', 'web', 'read']);
+    const DEFINITIVE = new Set(['deliver', 'compose', 'research', 'web', 'read', 'write']);
     if (!work.ok && (DEFINITIVE.has(step.kind) || !step.verify)) {
       setStep(i, { status: 'failed', ms: Date.now() - started });
       return fail(work.out);
@@ -866,7 +890,10 @@ async function executeStep(i, { cwd, member, task }) {
     // first paragraph" became browse + deliver + a verify that failed the whole
     // errand even though the browsing had the answer. A successful deliver is
     // its own proof; it does not also face a shell check.
-    if (work.ok && step.kind === 'deliver') {
+    if (work.ok && (step.kind === 'deliver' || step.kind === 'write')) {
+      // A write step already put the exact bytes on disk and registered the
+      // file; a Test-Path the planner bolted on would only add a way to fail a
+      // step that plainly worked.
       setStep(i, { status: 'ok', ms: Date.now() - started });
       record('step', `step ${i + 1} done`, { level: 'ok' });
       return ok();
