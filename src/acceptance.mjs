@@ -180,6 +180,13 @@ const INHERITS_CONTENT = /\b(renam|copie|copy|moved?|moving|back(?:ing)?[\s-]?up
 // produced" complaint must not fire on them.
 const LEAVES_NOTHING = /\b(delet|remov|eras|purg|moved?|moving)\w*/i;
 
+// A browser deliverable that changed the world — submitted a form, signed in,
+// posted, uploaded — is not proven by having read a page afterwards; it owes a
+// check. A read deliverable ("the top 5 stories", "the first paragraph") is
+// proven by the reading itself.
+const STATE_CHANGE =
+  /\b(submit|submitted|post(ed|ing)?|log(ged)?\s*in|sign(ed)?\s*in|sign\s*up|upload|fill(ed|ing)?\s*(in|out)|order(ed)?|book(ed)?|register(ed)?|purchas|sent|deleted|created an? account)\b/i;
+
 // A pure file operation — copy, rename, move, delete — proven by its own
 // command check needs no second opinion. The model judge earns its keep on
 // authored content: is this the right subject, is it a placeholder, does the
@@ -209,9 +216,21 @@ export function obviousShortfall(artifacts, deliverables = [], { category = null
     // for producing no file it never owed.
     if (category === 'operation') return null;
     // A browser mission owes a state, not a file — but the state must have
-    // been proven by a check, not asserted by a step that merely ran.
+    // been proven, not asserted by a step that merely ran. For "go to X and
+    // tell me Y", the proof is not a shell check — it is the web step having
+    // read the page: it navigated, gathered the answer, and reported ok. A read
+    // that succeeded is the verification. Reporting these failed for lacking a
+    // shell verify they were never going to have is why every "tell me from a
+    // website" task was scored a failure while the answer sat in the journal.
     if (category === 'browser') {
-      const proven = steps.some((s) => s.verify && s.status === 'ok');
+      // A read is proven by having read; a state change is not. "tell me the top
+      // 5 stories" is done the moment the web step reports the answer, but "the
+      // form submitted" or "signed in" changed the world and merely reading a
+      // page does not prove it happened — those still owe a check.
+      const changesState = deliverables.some((d) => STATE_CHANGE.test(d));
+      const readProof =
+        !changesState && steps.some((s) => (s.kind === 'web' || s.kind === 'read') && s.status === 'ok');
+      const proven = readProof || steps.some((s) => s.verify && s.status === 'ok');
       return steps.length && !proven ? 'the browser was driven, but the state it reached was never verified' : null;
     }
     // A delete or a move-away owes no file in the workspace — the file was

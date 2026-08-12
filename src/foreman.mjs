@@ -247,14 +247,22 @@ export async function runMission(task, { workspace } = {}) {
       // look at it invents a delivery nobody asked for — "the owner did not
       // receive a file" for "tell me how many files are on the desktop". The
       // commands already answered the question.
-      const operationProven = mission.category === 'operation' && !shortfall;
-      const skipJudge = provenByCommand || operationProven;
+      // A browser mission is judged the same way: its proof is the web step
+      // having read the answer, and the model judge — which only ever sees files
+      // and step outputs — fails "tell me the first paragraph" for not
+      // delivering the paragraph "in any file or final output", though the
+      // browser read it and it sits in the step's own output. When the cheap
+      // check already passed for an operation or a browser mission, the judge
+      // adds nothing but misfires.
+      const stepsProvenCategory =
+        (mission.category === 'operation' || mission.category === 'browser') && !shortfall;
+      const skipJudge = provenByCommand || stepsProvenCategory;
       if (skipJudge) {
         record(
           'accept',
           provenByCommand
             ? 'a file operation proven by its command check — no second opinion needed'
-            : 'an operation proven by its command checks — no second opinion needed',
+            : `a ${mission.category} mission proven by its steps — no second opinion needed`,
           { level: 'ok' },
         );
       }
@@ -726,14 +734,33 @@ async function executeStep(i, { cwd, member, task }) {
       // Send what was actually produced, not what the plan guessed would be.
       let file = named ? orArtifact(path.resolve(cwd, named.trim())) : artifacts[artifacts.length - 1] || null;
 
-      if (!file) {
-        work = { ok: false, out: `no file named in this step and no earlier step produced one: "${instruction}"` };
-      } else {
+      // Did the owner actually ask for something to be sent? "tell me", "show
+      // me", "what is", "list" want an answer they are already looking at, not
+      // a file pushed to their phone. The brain plans a deliver step for these
+      // anyway — for a file no step ever wrote — and the mission was failing on
+      // a delivery nobody requested. When no send was asked for and there is no
+      // real file, the answer the browser gathered is already in the step
+      // output; treat the phantom deliver as the no-op it is.
+      const askedToSend = /\b(send|message|text|e-?mail|telegram|deliver|share|notify)\b/i.test(String(task || ''));
+      const haveFile = file && fs.existsSync(file);
+
+      if (haveFile) {
         const telegram = await import('./telegram.mjs');
         const sent = await telegram.deliver(file, mission.summary || '');
         work = sent.ok
           ? { ok: true, out: `sent ${path.basename(file)} to you on Telegram` }
           : { ok: false, out: `could not send ${path.basename(file)}: ${sent.error}` };
+      } else if (!askedToSend) {
+        work = {
+          ok: true,
+          out: 'nothing was asked to be sent; the answer is in the results above',
+        };
+        record('step', `step ${i + 1}: no delivery was asked for — the answer is shown, not sent`, { level: 'warn' });
+      } else {
+        work = {
+          ok: false,
+          out: `you asked for this to be sent, but no file was produced to send: "${instruction}"`,
+        };
       }
     } else if (step.kind === 'compose') {
       // The step that turns gathered material into something worth reading.
@@ -819,6 +846,18 @@ async function executeStep(i, { cwd, member, task }) {
     if (!work.ok && (DEFINITIVE.has(step.kind) || !step.verify)) {
       setStep(i, { status: 'failed', ms: Date.now() - started });
       return fail(work.out);
+    }
+
+    // A deliver step settles its own question: it either sent the file (the API
+    // said so) or there was nothing to send. The planner sometimes bolts a
+    // Test-Path onto a deliver of a file that was never written — "give me the
+    // first paragraph" became browse + deliver + a verify that failed the whole
+    // errand even though the browsing had the answer. A successful deliver is
+    // its own proof; it does not also face a shell check.
+    if (work.ok && step.kind === 'deliver') {
+      setStep(i, { status: 'ok', ms: Date.now() - started });
+      record('step', `step ${i + 1} done`, { level: 'ok' });
+      return ok();
     }
 
     // ── prove it ──────────────────────────────────────────────────────────

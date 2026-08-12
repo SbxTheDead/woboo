@@ -42,6 +42,18 @@ test('producing no file is fine when no file was asked for', () => {
   assert.equal(obviousShortfall([], ['An answer to the question, in chat']), null);
 });
 
+test('a browser read is its own proof — no shell verify required', () => {
+  // "go to hacker news and tell me the top 5" — the web step navigated and read
+  // the answer, which is the verification. It has no shell verify and never
+  // will; failing it for that scored every "tell me from a website" task a loss.
+  const webRead = { category: 'browser', steps: [{ kind: 'web', status: 'ok', verify: null }] };
+  assert.equal(obviousShortfall([], [], webRead), null);
+  // A browser mission that drove but read nothing (all steps failed) is still
+  // unproven.
+  const drovenothing = { category: 'browser', steps: [{ kind: 'web', status: 'failed', verify: null }] };
+  assert.match(obviousShortfall([], [], drovenothing) || '', /never verified/i);
+});
+
 test('an empty file is a shortfall — unless an empty file is what was asked for', () => {
   const blank = file('file1.txt', '');
   assert.match(obviousShortfall([blank], ['A summary of the thread in file1.txt']) || '', /empty/i);
