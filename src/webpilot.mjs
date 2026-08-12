@@ -9,11 +9,41 @@
 // Measured against the vision pilot on the same machine: 16ms a look versus
 // 153 seconds.
 
+import fs from 'node:fs';
+import path from 'node:path';
 import { record } from './journal.mjs';
 import { publish } from './bus.mjs';
 import { setFace } from './face.mjs';
 import { assertLive } from './guard.mjs';
 import * as browser from './browser.mjs';
+
+// "take a screenshot" is a browser task whose deliverable is a file, not a line
+// of text — and the pilot, having navigated to the page, would say "done" and
+// leave nothing on disk, so the mission was failed for producing no file. When
+// the goal asks for one, capture the page and write it where the mission can
+// find it.
+const WANTS_SHOT = /\b(screenshot|screen[\s-]?shot|screen capture|capture the (page|screen)|take a (shot|picture|photo) of)\b/i;
+
+async function saveShot(workspace, pageUrl) {
+  try {
+    const data = await browser.screenshot();
+    if (!data) return null;
+    const dir = workspace || process.cwd();
+    fs.mkdirSync(dir, { recursive: true });
+    // Name it after the site so a mission that shoots two pages keeps both.
+    let host = 'page';
+    try {
+      host = new URL(pageUrl).hostname.replace(/^www\./, '').replace(/[^\w.-]/g, '') || 'page';
+    } catch {
+      // pageUrl was missing or not a URL; the default name stands.
+    }
+    const file = path.join(dir, `screenshot-${host}.png`);
+    fs.writeFileSync(file, Buffer.from(data, 'base64'));
+    return file;
+  } catch {
+    return null;
+  }
+}
 
 const ACTION_SCHEMA = {
   type: 'object',
@@ -172,7 +202,8 @@ function isCredentialField(element) {
   );
 }
 
-export async function browse({ goal, url = null, maxSteps = 14, ask, onProgress } = {}) {
+export async function browse({ goal, url = null, maxSteps = 14, ask, onProgress, workspace = null } = {}) {
+  const wantsShot = WANTS_SHOT.test(String(goal || ''));
   const say = (message, level = 'info') => {
     record('web', message, { level });
     if (onProgress) onProgress(message);
@@ -285,6 +316,15 @@ export async function browse({ goal, url = null, maxSteps = 14, ask, onProgress 
 
     if (decision.action === 'done') {
       setFace('happy', 'done');
+      // A screenshot goal owes a file. Capture the page now, while the browser
+      // is still on it, and hand the path back so the mission has its artifact.
+      if (wantsShot) {
+        const file = await saveShot(workspace, page.url);
+        if (file) {
+          say(`saved a screenshot of ${page.url}`, 'ok');
+          return { ok: true, out: `screenshot saved: ${path.basename(file)}`, steps: step, url: page.url, file };
+        }
+      }
       return { ok: true, out: decision.text || 'done', steps: step, url: page.url };
     }
     if (decision.action === 'stuck') {

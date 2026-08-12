@@ -686,6 +686,9 @@ async function executeStep(i, { cwd, member, task }) {
         ask: brain.ask,
         maxSteps: wanted > 1 ? Math.min(40, 8 + wanted * 3) : 14,
         onProgress: (note) => publish({ type: 'crew:output', step: i, chunk: note }),
+        // So a "take a screenshot" goal can write its PNG where the mission
+        // looks for artifacts, instead of leaving nothing on disk.
+        workspace: cwd,
       });
 
       // Keep what it read. A browser step is how Woboo finds things out, and
