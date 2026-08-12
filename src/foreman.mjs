@@ -443,19 +443,39 @@ export function filesTouched(command, cwd, since = 0) {
   const found = [];
   const seen = new Set();
 
+  // Directories the command names through an environment variable. A file
+  // written with `Join-Path $env:TEMP 'woboo_test.txt'` lives in TEMP, but the
+  // filename literal on its own resolves against cwd and the file is missed —
+  // so the directories those variables point at are candidate homes too.
+  const bases = [cwd];
+  for (const m of text.matchAll(/\$env:(\w+)|%(\w+)%/gi)) {
+    const dir = process.env[m[1] || m[2]];
+    try {
+      if (dir && fs.statSync(dir).isDirectory() && !bases.includes(dir)) bases.push(dir);
+    } catch {
+      // The variable is unset or not a directory — nothing to add.
+    }
+  }
+
   for (const match of text.matchAll(TOKENS)) {
     const raw = (match[1] ?? match[2] ?? match[3] ?? '').trim().replace(/^[`~]+/, '');
     if (!raw || !LOOKS_LIKE_A_FILE.test(raw)) continue;
 
     const token = resolveVariables(raw);
-    let full;
-    try {
-      full = path.resolve(cwd, token);
-    } catch {
-      continue;
+    const expanded = [];
+    for (const base of bases) {
+      let full;
+      try {
+        full = path.resolve(base, token);
+      } catch {
+        continue;
+      }
+      for (const c of full.includes('*') ? expandWildcard(full) : [full]) expanded.push(c);
+      // An absolute token ignores the base, so trying more bases is wasted.
+      if (path.isAbsolute(token)) break;
     }
 
-    for (const candidate of full.includes('*') ? expandWildcard(full) : [full]) {
+    for (const candidate of expanded) {
       if (seen.has(candidate)) continue;
       seen.add(candidate);
       try {

@@ -87,6 +87,23 @@ test('a directory is not a file', () => {
   assert.deepEqual(filesTouched("New-Item -ItemType Directory 'folder.v2'", dir, 0), []);
 });
 
+test('a file written under $env:TEMP is found there, not only in cwd', () => {
+  // Task 16: Set-Content (Join-Path $env:TEMP 'woboo_test.txt'). The filename
+  // literal resolves against cwd and misses; the file lives in TEMP.
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'woboo-temp-'));
+  const previous = process.env.WOBOO_TEMP_DIR;
+  process.env.WOBOO_TEMP_DIR = temp;
+  try {
+    fs.writeFileSync(path.join(temp, 'woboo_test.txt'), 'content');
+    const found = filesTouched("Set-Content -Path (Join-Path $env:WOBOO_TEMP_DIR 'woboo_test.txt') -Value x", dir, 0);
+    assert.deepEqual(names(found), ['woboo_test.txt']);
+  } finally {
+    if (previous === undefined) delete process.env.WOBOO_TEMP_DIR;
+    else process.env.WOBOO_TEMP_DIR = previous;
+    fs.rmSync(temp, { recursive: true, force: true });
+  }
+});
+
 test('an environment variable is looked up rather than guessed at', () => {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'woboo-env-'));
   const previous = process.env.WOBOO_TEST_DIR;

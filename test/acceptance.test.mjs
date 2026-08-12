@@ -72,6 +72,9 @@ test('prose "file names" does not count as owing a file', () => {
   // But "a PDF", "the document", "an image" still owe their artifact.
   assert.match(obviousShortfall([], ['A PDF of the summary']) || '', /no file/i);
   assert.match(obviousShortfall([], ['The document with the findings']) || '', /no file/i);
+  // "the file path to python" is a locator, not an owed file.
+  assert.equal(obviousShortfall([], ['The file path(s) to the Python executable(s) found on the system']), null);
+  assert.equal(obviousShortfall([], ['The file name of the newest download']), null);
 });
 
 test('a delete or move owes no file left behind', () => {

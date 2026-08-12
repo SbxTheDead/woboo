@@ -118,8 +118,12 @@ export function evidenceFor(file) {
 // "file" only modifies "names" and nothing is owed. Matching the bare word was
 // enough to categorize a console-listing task as coding and then fail it for
 // producing no file it never owed.
+// "the file path to python" and "a list of file names" describe a locator, not
+// an owed document — "file" there is an adjective on path/name/location, so it
+// is excluded. A real deliverable file is "a PDF", "the document", or anything
+// with an extension.
 const NAMES_A_FILE =
-  /[-\w]+\.(pdf|html?|txt|md|docx?|xlsx?|pptx?|csv|json|png|jpe?g|gif|zip)\b|\b(?:an?|the|one|each|new|another|its?|my|into an?|as an?)\s+(file|document|pdf|spreadsheet|presentation|screenshot|image|photo|picture)\b/i;
+  /[-\w]+\.(pdf|html?|txt|md|docx?|xlsx?|pptx?|csv|json|png|jpe?g|gif|zip)\b|\b(?:an?|the|one|each|new|another|its?|my|into an?|as an?)\s+(file(?!\s*(?:path|name|location|type|extension|size|count))|document|pdf|spreadsheet|presentation|screenshot|image|photo|picture)\b/i;
 
 // What "finished" has to look like depends on the kind of mission.
 //
